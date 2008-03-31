@@ -136,6 +136,13 @@ int mpq_extract__list(char *mpq_filename, char *filename, unsigned int number, u
 		/* loop through all files. */
 		for (i = 1; i <= libmpq__archive_info(mpq_archive, LIBMPQ_ARCHIVE_FILES); i++) {
 
+			/* open the file. */
+			if ((result = libmpq__file_open(mpq_archive, i)) < 0) {
+
+				/* something on open file failed. */
+				return result;
+			}
+
 			/* show file information. */
 			NOTICE("  %4i   %10i   %9i %6.0f%%   %3s   %3s   %3s   %s\n",
 				i,
@@ -147,6 +154,13 @@ int mpq_extract__list(char *mpq_filename, char *filename, unsigned int number, u
 				libmpq__file_info(mpq_archive, LIBMPQ_FILE_ENCRYPTED, i) ? "yes" : "no",
 				libmpq__file_name(mpq_archive, i)
 			);
+
+			/* close the file. */
+			if ((result = libmpq__file_close(mpq_archive, i)) < 0) {
+
+				/* something on close file failed. */
+				return result;
+			}
 		}
 
 		/* show footer. */
