@@ -1,0 +1,27 @@
+FAQ - Frequently Asked Questions
+================================
+
+Q: What is mpq-tools?
+A: mpq-tools are a set of utilities to extract, create and manipulate
+   MoPaQ mpq archives used by blizzard in their games.
+
+Q: What can i do with mpq-tools?
+A: With mpq-tools you can extract, create and manipulate mpq archives.
+
+Q: Is it possible to extract files with their filenames?
+A: Yes, since version 0.4.1 of libmpq you can extract files by name
+   or number.
+
+Q: Is it legal?
+A: Yes, i think so. I have no idea why it should not, all informations
+   about the file format are available.
+
+Q: Is there a description of the functions?
+A: Since version 0.4.0 mpq-tools comes with a user documentation on
+   how to use the utilities. The documentation are written as manual
+   pages.
+
+Q: Can i help?
+A: Yes, help is needed, not only with developing, also with testing.
+   A good point to start is using a recent SVN version of mpq-tools.
+   and trying to use it with every mpq archive you could get :)
