@@ -677,6 +677,8 @@ int main(int argc, char **argv) {
 	/* count number of files to process in archive. */
 	count = argc - optind;
 
+	libmpq__init ();
+
 	/* process file names. */
 	do {
 
@@ -701,6 +703,7 @@ int main(int argc, char **argv) {
 			ERROR("%s: '%s' no such file or directory\n", program_name, mpq_filename);
 
 			/* if archive did not exist, we can stop everything. :) */
+			libmpq__shutdown ();
 			exit(1);
 		}
 
@@ -716,5 +719,6 @@ int main(int argc, char **argv) {
 	} while (++optind < argc);
 
 	/* execution was successful. */
+	libmpq__shutdown ();
 	exit(0);
 }
