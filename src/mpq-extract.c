@@ -671,6 +671,15 @@ int main(int argc, char **argv) {
 		}
 	}
 
+	if (!action) {
+		ERROR("%s: no action given.\n", program_name);
+
+		ERROR("Try `%s --help' for more information.\n", program_name);
+
+		/* exit with error. */
+		exit(1);
+	}
+
 	/* we assume first parameter which is left as archive. */
 	strncpy(mpq_filename, argv[optind++], PATH_MAX);
 
