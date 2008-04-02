@@ -73,6 +73,32 @@ int mpq_extract__version(char *program_name) {
 	return 0;
 }
 
+/* returns the filename for the given file in the archive.
+ * if the real filename cannot be retrieved, a dummy name is returned
+ * instead.
+ */
+static const char *get_filename (mpq_archive_s *mpq_archive, unsigned int file_number) {
+
+	static char buf[32];
+	const char *ret;
+
+	ret = libmpq__file_name (mpq_archive, file_number);
+
+	if (!ret) {
+		unsigned int total_files;
+
+		total_files = libmpq__archive_info(mpq_archive, LIBMPQ_ARCHIVE_FILES);
+
+		if (file_number > total_files)
+			return NULL;
+
+		snprintf(buf, sizeof(buf), "file%06i.xxx", file_number);
+		ret = buf;
+	}
+
+	return ret;
+}
+
 /* this function will list the archive content. */
 int mpq_extract__list(char *mpq_filename, unsigned int file_number, unsigned int number, unsigned int files) {
 
@@ -122,7 +148,7 @@ int mpq_extract__list(char *mpq_filename, unsigned int file_number, unsigned int
 		NOTICE("file compressed:		%s\n", libmpq__file_info(mpq_archive, LIBMPQ_FILE_COMPRESSED, file_number) ? "yes" : "no");
 		NOTICE("file imploded:			%s\n", libmpq__file_info(mpq_archive, LIBMPQ_FILE_IMPLODED, file_number) ? "yes" : "no");
 		NOTICE("file encrypted:			%s\n", libmpq__file_info(mpq_archive, LIBMPQ_FILE_ENCRYPTED, file_number) ? "yes" : "no");
-		NOTICE("file name:			%s\n", libmpq__file_name (mpq_archive, file_number));
+		NOTICE("file name:			%s\n", get_filename(mpq_archive, file_number));
 	} else {
 
 		/* show header. */
@@ -148,7 +174,7 @@ int mpq_extract__list(char *mpq_filename, unsigned int file_number, unsigned int
 				libmpq__file_info(mpq_archive, LIBMPQ_FILE_COMPRESSED, i) ? "yes" : "no",
 				libmpq__file_info(mpq_archive, LIBMPQ_FILE_IMPLODED, i) ? "yes" : "no",
 				libmpq__file_info(mpq_archive, LIBMPQ_FILE_ENCRYPTED, i) ? "yes" : "no",
-				libmpq__file_name(mpq_archive, i)
+				get_filename(mpq_archive, i)
 			);
 
 			/* close the file. */
@@ -206,8 +232,13 @@ int mpq_extract__extract_file(mpq_archive_s *mpq_archive, unsigned int file_numb
 		return result;
 	}
 
-	/* show filename to extract. */
-	filename = libmpq__file_name(mpq_archive, file_number);
+	/* get/show filename to extract. */
+	if ((filename = get_filename(mpq_archive, file_number)) == NULL) {
+
+		/* filename was not found. */
+		return LIBMPQ_ERROR_EXIST;
+	}
+
 	NOTICE("extracting %s\n", filename);
 
 	/* loop through all blocks. */
@@ -487,7 +518,7 @@ int mpq_extract__extract(char *mpq_filename, unsigned int file_number) {
 	if (file_number) {
 
 		/* get filename. */
-		if ((filename = libmpq__file_name(mpq_archive, file_number)) == NULL) {
+		if ((filename = get_filename(mpq_archive, file_number)) == NULL) {
 
 			/* filename was not found. */
 			return LIBMPQ_ERROR_EXIST;
@@ -529,7 +560,7 @@ int mpq_extract__extract(char *mpq_filename, unsigned int file_number) {
 		for (i = 1; i <= libmpq__archive_info(mpq_archive, LIBMPQ_ARCHIVE_FILES); i++) {
 
 			/* get filename. */
-			if ((filename = libmpq__file_name(mpq_archive, i)) == NULL) {
+			if ((filename = get_filename(mpq_archive, i)) == NULL) {
 
 				/* filename was not found. */
 				return LIBMPQ_ERROR_EXIST;
