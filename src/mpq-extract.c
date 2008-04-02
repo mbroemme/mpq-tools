@@ -607,7 +607,7 @@ int main(int argc, char **argv) {
 	/* some common variables. */
 	char *program_name;
 	char mpq_filename[PATH_MAX];
-	unsigned int option = 0;
+	unsigned int action = 0;
 	unsigned int count;
 
 	/* get program name. */
@@ -655,10 +655,10 @@ int main(int argc, char **argv) {
 				mpq_extract__version(program_name);
 				exit(0);
 			case 'l':
-				option = 1;
+				action = 1;
 				continue;
 			case 'e':
-				option = 2;
+				action = 2;
 				continue;
 			default:
 
@@ -683,14 +683,14 @@ int main(int argc, char **argv) {
 	do {
 
 		/* check if we should list archive only. */
-		if (option == 1) {
+		if (action == 1) {
 
 			/* process archive. */
 			result = mpq_extract__list(mpq_filename, argv[optind], argc - optind, count);
 		}
 
 		/* check if we should extract archive content. */
-		if (option == 2) {
+		if (action == 2) {
 
 			/* extract archive content. */
 			result = mpq_extract__extract(mpq_filename, argv[optind]);
