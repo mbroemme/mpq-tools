@@ -100,10 +100,9 @@ int mpq_info__archive_info(char *program_name, char *mpq_filename, unsigned int 
 		NOTICE("archive compressed size:	%i\n", libmpq__archive_info(mpq_archive, LIBMPQ_ARCHIVE_COMPRESSED_SIZE));
 		NOTICE("archive uncompressed size:	%i\n", libmpq__archive_info(mpq_archive, LIBMPQ_ARCHIVE_UNCOMPRESSED_SIZE));
 		NOTICE("archive compression ratio:	%.2f\n", (100 - ((float)libmpq__archive_info(mpq_archive, LIBMPQ_ARCHIVE_COMPRESSED_SIZE) / (float)libmpq__archive_info(mpq_archive, LIBMPQ_ARCHIVE_UNCOMPRESSED_SIZE) * 100)));
-	}
 
-	/* always close file descriptor, file could be opened also if it is no valid mpq archive. */
-	libmpq__archive_close(mpq_archive);
+		libmpq__archive_close(mpq_archive);
+	}
 
 	/* free the memory of the mpq-archive. */
 	free(mpq_archive);
