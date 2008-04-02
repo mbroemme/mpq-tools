@@ -74,7 +74,7 @@ int mpq_extract__version(char *program_name) {
 }
 
 /* this function will list the archive content. */
-int mpq_extract__list(char *mpq_filename, char *filename, unsigned int number, unsigned int files) {
+int mpq_extract__list(char *mpq_filename, unsigned int file_number, unsigned int number, unsigned int files) {
 
 	/* some common variables. */
 	int result = 0;
@@ -99,7 +99,8 @@ int mpq_extract__list(char *mpq_filename, char *filename, unsigned int number, u
 	}
 
 	/* check if we should process all files. */
-	if (filename != NULL) {
+	if (file_number) {
+		unsigned int total_files;
 
 		/* check if processing multiple files. */
 		if (number > 0 && files > 1 && number < files) {
@@ -108,25 +109,20 @@ int mpq_extract__list(char *mpq_filename, char *filename, unsigned int number, u
 			NOTICE("\n");
 		}
 
-		/* get file number of given filename. */
-		if ((result = libmpq__file_number(mpq_archive, filename)) < 0) {
-
-			/* always close file descriptor, file could be opened also if it is no valid mpq archive. */
-			libmpq__archive_close(mpq_archive);
-
-			/* something on retrieving file number failed. */
-			return result;
+		total_files = libmpq__archive_info(mpq_archive, LIBMPQ_ARCHIVE_FILES);
+		if (file_number > total_files) {
+			return LIBMPQ_ERROR_EXIST;
 		}
 
 		/* show the file information. */
-		NOTICE("file number:			%i/%i\n", result, libmpq__archive_info(mpq_archive, LIBMPQ_ARCHIVE_FILES));
-		NOTICE("file compressed size:		%i\n", libmpq__file_info(mpq_archive, LIBMPQ_FILE_COMPRESSED_SIZE, result));
-		NOTICE("file uncompressed size:		%i\n", libmpq__file_info(mpq_archive, LIBMPQ_FILE_UNCOMPRESSED_SIZE, result));
-		NOTICE("file compression ratio:		%.2f%%\n", (100 - fabs(((float)libmpq__file_info(mpq_archive, LIBMPQ_FILE_COMPRESSED_SIZE, result) / (float)libmpq__file_info(mpq_archive, LIBMPQ_FILE_UNCOMPRESSED_SIZE, result) * 100))));
-		NOTICE("file compressed:		%s\n", libmpq__file_info(mpq_archive, LIBMPQ_FILE_COMPRESSED, result) ? "yes" : "no");
-		NOTICE("file imploded:			%s\n", libmpq__file_info(mpq_archive, LIBMPQ_FILE_IMPLODED, result) ? "yes" : "no");
-		NOTICE("file encrypted:			%s\n", libmpq__file_info(mpq_archive, LIBMPQ_FILE_ENCRYPTED, result) ? "yes" : "no");
-		NOTICE("file name:			%s\n", filename);
+		NOTICE("file number:			%i/%i\n", file_number, total_files);
+		NOTICE("file compressed size:		%i\n", libmpq__file_info(mpq_archive, LIBMPQ_FILE_COMPRESSED_SIZE, file_number));
+		NOTICE("file uncompressed size:		%i\n", libmpq__file_info(mpq_archive, LIBMPQ_FILE_UNCOMPRESSED_SIZE, file_number));
+		NOTICE("file compression ratio:		%.2f%%\n", (100 - fabs(((float)libmpq__file_info(mpq_archive, LIBMPQ_FILE_COMPRESSED_SIZE, file_number) / (float)libmpq__file_info(mpq_archive, LIBMPQ_FILE_UNCOMPRESSED_SIZE, file_number) * 100))));
+		NOTICE("file compressed:		%s\n", libmpq__file_info(mpq_archive, LIBMPQ_FILE_COMPRESSED, file_number) ? "yes" : "no");
+		NOTICE("file imploded:			%s\n", libmpq__file_info(mpq_archive, LIBMPQ_FILE_IMPLODED, file_number) ? "yes" : "no");
+		NOTICE("file encrypted:			%s\n", libmpq__file_info(mpq_archive, LIBMPQ_FILE_ENCRYPTED, file_number) ? "yes" : "no");
+		NOTICE("file name:			%s\n", libmpq__file_name (mpq_archive, file_number));
 	} else {
 
 		/* show header. */
@@ -188,9 +184,10 @@ int mpq_extract__list(char *mpq_filename, char *filename, unsigned int number, u
 }
 
 /* this function extract a single file from archive. */
-int mpq_extract__extract_file(mpq_archive_s *mpq_archive, unsigned int file_number, char *filename, int fd) {
+int mpq_extract__extract_file(mpq_archive_s *mpq_archive, unsigned int file_number, int fd) {
 
 	/* some common variables. */
+	const char *filename;
 	unsigned int i;
 	unsigned char *in_buf;
 	unsigned char *out_buf;
@@ -210,6 +207,7 @@ int mpq_extract__extract_file(mpq_archive_s *mpq_archive, unsigned int file_numb
 	}
 
 	/* show filename to extract. */
+	filename = libmpq__file_name(mpq_archive, file_number);
 	NOTICE("extracting %s\n", filename);
 
 	/* loop through all blocks. */
@@ -459,10 +457,11 @@ int mpq_extract__extract_file(mpq_archive_s *mpq_archive, unsigned int file_numb
 }
 
 /* this function will extract the archive content. */
-int mpq_extract__extract(char *mpq_filename, char *filename) {
+int mpq_extract__extract(char *mpq_filename, unsigned int file_number) {
 
 	/* some common variables. */
 	mpq_archive_s *mpq_archive;
+	const char *filename;
 	unsigned int i;
 	int result = 0;
 	int fd = 0;
@@ -485,16 +484,13 @@ int mpq_extract__extract(char *mpq_filename, char *filename) {
 	}
 
 	/* check if we should process all files. */
-	if (filename != NULL) {
+	if (file_number) {
 
-		/* get file number of given filename. */
-		if ((result = libmpq__file_number(mpq_archive, filename)) < 0) {
+		/* get filename. */
+		if ((filename = libmpq__file_name(mpq_archive, file_number)) == NULL) {
 
-			/* always close file descriptor, file could be opened also if it is no valid mpq archive. */
-			libmpq__archive_close(mpq_archive);
-
-			/* something on retrieving file number failed. */
-			return result;
+			/* filename was not found. */
+			return LIBMPQ_ERROR_EXIST;
 		}
 
 		/* open file for writing. */
@@ -505,7 +501,7 @@ int mpq_extract__extract(char *mpq_filename, char *filename) {
 		}
 
 		/* extract file. */
-		if ((result = mpq_extract__extract_file(mpq_archive, result, filename, fd)) < 0) {
+		if ((result = mpq_extract__extract_file(mpq_archive, file_number, fd)) < 0) {
 
 			/* close file. */
 			if ((close(fd)) < 0) {
@@ -547,7 +543,7 @@ int mpq_extract__extract(char *mpq_filename, char *filename) {
 			}
 
 			/* extract file. */
-			if ((result = mpq_extract__extract_file(mpq_archive, i, filename, fd)) < 0) {
+			if ((result = mpq_extract__extract_file(mpq_archive, i, fd)) < 0) {
 
 				/* close file. */
 				if ((close(fd)) < 0) {
@@ -690,19 +686,30 @@ int main(int argc, char **argv) {
 
 	/* process file names. */
 	do {
+		unsigned int file_number = 0;
+
+		if (argv[optind]) {
+			file_number = strtol (argv[optind], NULL, 10);
+
+			/* check whether we were given a (valid) file number. */
+			if (!file_number) {
+				ERROR("%s: invalid file number '%s'\n", program_name, argv[optind]);
+				libmpq__shutdown ();
+				exit(1);
+			}
+		}
 
 		/* check if we should list archive only. */
 		if (action == 1) {
 
 			/* process archive. */
-			result = mpq_extract__list(mpq_filename, argv[optind], argc - optind, count);
+			result = mpq_extract__list(mpq_filename, file_number, argc - optind, count);
 		}
 
 		/* check if we should extract archive content. */
 		if (action == 2) {
-
 			/* extract archive content. */
-			result = mpq_extract__extract(mpq_filename, argv[optind]);
+			result = mpq_extract__extract(mpq_filename, file_number);
 		}
 
 		/* check if archive was correctly opened. */
