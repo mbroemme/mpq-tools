@@ -79,24 +79,23 @@ int mpq_extract__version(char *program_name) {
  */
 static const char *get_filename (mpq_archive_s *mpq_archive, unsigned int file_number) {
 
-	static char buf[32];
-	const char *ret;
+	static char buf[PATH_MAX];
+	int ret;
 
-	ret = libmpq__file_name (mpq_archive, file_number);
+	ret = libmpq__file_name(mpq_archive, file_number, buf, PATH_MAX);
 
 	if (!ret) {
 		unsigned int total_files;
 
 		total_files = libmpq__archive_info(mpq_archive, LIBMPQ_ARCHIVE_FILES);
 
-		if (file_number > total_files)
+		if (file_number < 1 || file_number > total_files)
 			return NULL;
 
 		snprintf(buf, sizeof(buf), "file%06i.xxx", file_number);
-		ret = buf;
 	}
 
-	return ret;
+	return buf;
 }
 
 /* this function will list the archive content. */
@@ -118,7 +117,7 @@ int mpq_extract__list(char *mpq_filename, unsigned int file_number, unsigned int
 	memset(mpq_archive, 0, sizeof(mpq_archive_s));
 
 	/* open the mpq-archive. */
-	if ((result = libmpq__archive_open(mpq_archive, mpq_filename)) < 0) {
+	if ((result = libmpq__archive_open(mpq_archive, mpq_filename, -1)) < 0) {
 
 		/* something on open file failed. */
 		return result;
@@ -142,9 +141,9 @@ int mpq_extract__list(char *mpq_filename, unsigned int file_number, unsigned int
 
 		/* show the file information. */
 		NOTICE("file number:			%i/%i\n", file_number, total_files);
-		NOTICE("file compressed size:		%i\n", libmpq__file_info(mpq_archive, LIBMPQ_FILE_COMPRESSED_SIZE, file_number));
-		NOTICE("file uncompressed size:		%i\n", libmpq__file_info(mpq_archive, LIBMPQ_FILE_UNCOMPRESSED_SIZE, file_number));
-		NOTICE("file compression ratio:		%.2f%%\n", (100 - fabs(((float)libmpq__file_info(mpq_archive, LIBMPQ_FILE_COMPRESSED_SIZE, file_number) / (float)libmpq__file_info(mpq_archive, LIBMPQ_FILE_UNCOMPRESSED_SIZE, file_number) * 100))));
+		NOTICE("file compressed size:		%i\n", libmpq__file_info(mpq_archive, LIBMPQ_FILE_PACKED_SIZE, file_number));
+		NOTICE("file uncompressed size:		%i\n", libmpq__file_info(mpq_archive, LIBMPQ_FILE_UNPACKED_SIZE, file_number));
+		NOTICE("file compression ratio:		%.2f%%\n", (100 - fabs(((float)libmpq__file_info(mpq_archive, LIBMPQ_FILE_PACKED_SIZE, file_number) / (float)libmpq__file_info(mpq_archive, LIBMPQ_FILE_UNPACKED_SIZE, file_number) * 100))));
 		NOTICE("file compressed:		%s\n", libmpq__file_info(mpq_archive, LIBMPQ_FILE_COMPRESSED, file_number) ? "yes" : "no");
 		NOTICE("file imploded:			%s\n", libmpq__file_info(mpq_archive, LIBMPQ_FILE_IMPLODED, file_number) ? "yes" : "no");
 		NOTICE("file encrypted:			%s\n", libmpq__file_info(mpq_archive, LIBMPQ_FILE_ENCRYPTED, file_number) ? "yes" : "no");
@@ -168,9 +167,9 @@ int mpq_extract__list(char *mpq_filename, unsigned int file_number, unsigned int
 			/* show file information. */
 			NOTICE("  %4i   %10i   %9i %6.0f%%   %3s   %3s   %3s   %s\n",
 				i,
-				libmpq__file_info(mpq_archive, LIBMPQ_FILE_UNCOMPRESSED_SIZE, i),
-				libmpq__file_info(mpq_archive, LIBMPQ_FILE_COMPRESSED_SIZE, i),
-				(100 - fabs(((float)libmpq__file_info(mpq_archive, LIBMPQ_FILE_COMPRESSED_SIZE, i) / (float)libmpq__file_info(mpq_archive, LIBMPQ_FILE_UNCOMPRESSED_SIZE, i) * 100))),
+				libmpq__file_info(mpq_archive, LIBMPQ_FILE_UNPACKED_SIZE, i),
+				libmpq__file_info(mpq_archive, LIBMPQ_FILE_PACKED_SIZE, i),
+				(100 - fabs(((float)libmpq__file_info(mpq_archive, LIBMPQ_FILE_PACKED_SIZE, i) / (float)libmpq__file_info(mpq_archive, LIBMPQ_FILE_UNPACKED_SIZE, i) * 100))),
 				libmpq__file_info(mpq_archive, LIBMPQ_FILE_COMPRESSED, i) ? "yes" : "no",
 				libmpq__file_info(mpq_archive, LIBMPQ_FILE_IMPLODED, i) ? "yes" : "no",
 				libmpq__file_info(mpq_archive, LIBMPQ_FILE_ENCRYPTED, i) ? "yes" : "no",
@@ -214,16 +213,9 @@ int mpq_extract__extract_file(mpq_archive_s *mpq_archive, unsigned int file_numb
 
 	/* some common variables. */
 	const char *filename;
-	unsigned int i;
-	unsigned char *in_buf;
 	unsigned char *out_buf;
-	unsigned char *temp_buf;
-	unsigned int in_size;
 	unsigned int out_size;
-	unsigned int temp_size;
 	int result = 0;
-	int rb = 0;
-	int tb = 0;
 
 	/* open the file. */
 	if ((result = libmpq__file_open(mpq_archive, file_number)) < 0) {
@@ -241,247 +233,19 @@ int mpq_extract__extract_file(mpq_archive_s *mpq_archive, unsigned int file_numb
 
 	NOTICE("extracting %s\n", filename);
 
-	/* loop through all blocks. */
-	for (i = 1; i <= libmpq__file_info(mpq_archive, LIBMPQ_FILE_BLOCKS, file_number); i++) {
+	if ((out_size = libmpq__file_info(mpq_archive, LIBMPQ_FILE_UNPACKED_SIZE, file_number)) < 0)
+		return out_size;
 
-		/* check if file is encrypted. */
-		if (libmpq__file_info(mpq_archive, LIBMPQ_FILE_ENCRYPTED, file_number) == 1) {
+	if ((out_buf = malloc(out_size)) == NULL)
+		return LIBMPQ_ERROR_MALLOC;
 
-			/* get buffer sizes. */
-			in_size   = libmpq__block_info(mpq_archive, LIBMPQ_BLOCK_ENCRYPTED_SIZE, file_number, i);
-			temp_size = libmpq__block_info(mpq_archive, LIBMPQ_BLOCK_DECRYPTED_SIZE, file_number, i);
+	if ((result = libmpq__file_read(mpq_archive, out_buf, out_size, file_number)) < 0)
+		return result;
 
-			/* allocate memory for the buffers. */
-			if ((in_buf   = malloc(in_size))   == NULL ||
-			    (temp_buf = malloc(temp_size)) == NULL) {
+	write(fd, out_buf, out_size);
 
-				/* memory allocation problem. */
-				return LIBMPQ_ERROR_MALLOC;
-			}
-
-			/* cleanup. */
-			memset(in_buf,   0, in_size);
-			memset(temp_buf, 0, temp_size);
-
-			/* seek in file. */
-			if (lseek(mpq_archive->fd, libmpq__block_info(mpq_archive, LIBMPQ_BLOCK_OFFSET, file_number, i), SEEK_SET) < 0) {
-
-				/* something with seek in file failed. */
-				return LIBMPQ_ERROR_LSEEK;
-			}
-
-			/* read block from file. */
-			if ((rb = read(mpq_archive->fd, in_buf, in_size)) < 0) {
-
-				/* free temporary buffer if used. */
-				if (temp_buf != NULL) {
-
-					/* free temporary buffer. */
-					free(temp_buf);
-				}
-
-				/* free input buffer if used. */
-				if (in_buf != NULL) {
-
-					/* free input buffer. */
-					free(in_buf);
-				}
-
-				/* something on reading block failed. */
-				return LIBMPQ_ERROR_READ;
-			}
-
-			/* decrypt the block. */
-			if ((tb = libmpq__block_decrypt(in_buf, in_size, temp_buf, temp_size, libmpq__block_info(mpq_archive, LIBMPQ_BLOCK_SEED, file_number, i))) < 0) {
-
-				/* free temporary buffer if used. */
-				if (temp_buf != NULL) {
-
-					/* free temporary buffer. */
-					free(temp_buf);
-				}
-
-				/* free input buffer if used. */
-				if (in_buf != NULL) {
-
-					/* free input buffer. */
-					free(in_buf);
-				}
-
-				/* something on decrypting block failed. */
-				return tb;
-			}
-
-			/* free input buffer if used. */
-			if (in_buf != NULL) {
-
-				/* free input buffer. */
-				free(in_buf);
-			}
-		}
-
-		/* get buffer sizes. */
-		in_size  = libmpq__block_info(mpq_archive, LIBMPQ_BLOCK_COMPRESSED_SIZE, file_number, i);
-		out_size = libmpq__block_info(mpq_archive, LIBMPQ_BLOCK_UNCOMPRESSED_SIZE, file_number, i);
-
-		/* allocate memory for the buffers. */
-		if ((in_buf  = malloc(in_size))  == NULL ||
-		    (out_buf = malloc(out_size)) == NULL) {
-
-			/* check if file is encrypted. */
-			if (libmpq__file_info(mpq_archive, LIBMPQ_FILE_ENCRYPTED, file_number) == 1) {
-
-				/* free temporary buffer if used. */
-				if (temp_buf != NULL) {
-
-					/* free temporary buffer. */
-					free(temp_buf);
-				}
-			}
-
-			/* memory allocation problem. */
-			return LIBMPQ_ERROR_MALLOC;
-		}
-
-		/* cleanup. */
-		memset(in_buf,  0, in_size);
-		memset(out_buf, 0, out_size);
-
-		/* check if file is encrypted. */
-		if (libmpq__file_info(mpq_archive, LIBMPQ_FILE_ENCRYPTED, file_number) == 1) {
-
-			/* copy temporary buffer to input buffer. */
-			memcpy(in_buf, temp_buf, in_size);
-
-			/* free temporary buffer if used. */
-			if (temp_buf != NULL) {
-
-				/* free temporary buffer. */
-				free(temp_buf);
-			}
-		} else {
-
-			/* seek in file. */
-			if (lseek(mpq_archive->fd, libmpq__block_info(mpq_archive, LIBMPQ_BLOCK_OFFSET, file_number, i), SEEK_SET) < 0) {
-
-				/* something with seek in file failed. */
-				return LIBMPQ_ERROR_LSEEK;
-			}
-
-			/* read block from file. */
-			if ((rb = read(mpq_archive->fd, in_buf, in_size)) < 0) {
-
-				/* free output buffer if used. */
-				if (out_buf != NULL) {
-
-					/* free output buffer. */
-					free(out_buf);
-				}
-
-				/* free input buffer if used. */
-				if (in_buf != NULL) {
-
-					/* free input buffer. */
-					free(in_buf);
-				}
-
-				/* something on reading block failed. */
-				return LIBMPQ_ERROR_READ;
-			}
-		}
-
-		/* check if file is compressed. */
-		if (libmpq__file_info(mpq_archive, LIBMPQ_FILE_COMPRESSED, file_number) == 1) {
-
-			/* decompress the block. */
-			if ((tb = libmpq__block_decompress(in_buf, in_size, out_buf, out_size)) < 0) {
-
-				/* free output buffer if used. */
-				if (out_buf != NULL) {
-
-					/* free output buffer. */
-					free(out_buf);
-				}
-
-				/* free input buffer if used. */
-				if (in_buf != NULL) {
-
-					/* free input buffer. */
-					free(in_buf);
-				}
-
-				/* something on decrypting block failed. */
-				return tb;
-			}
-		}
-
-		/* check if file is imploded. */
-		if (libmpq__file_info(mpq_archive, LIBMPQ_FILE_IMPLODED, file_number) == 1) {
-
-			/* explode the block. */
-			if ((tb = libmpq__block_explode(in_buf, in_size, out_buf, out_size)) < 0) {
-
-				/* free output buffer if used. */
-				if (out_buf != NULL) {
-
-					/* free output buffer. */
-					free(out_buf);
-				}
-
-				/* free input buffer if used. */
-				if (in_buf != NULL) {
-
-					/* free input buffer. */
-					free(in_buf);
-				}
-
-				/* something on decrypting block failed. */
-				return tb;
-			}
-		}
-
-		/* check if file is neither compressed nor imploded. */
-		if (libmpq__file_info(mpq_archive, LIBMPQ_FILE_COPIED, file_number) == 1) {
-
-			/* copy the block. */
-			if ((tb = libmpq__block_copy(in_buf, in_size, out_buf, out_size)) < 0) {
-
-				/* free output buffer if used. */
-				if (out_buf != NULL) {
-
-					/* free output buffer. */
-					free(out_buf);
-				}
-
-				/* free input buffer if used. */
-				if (in_buf != NULL) {
-
-					/* free input buffer. */
-					free(in_buf);
-				}
-
-				/* something on decrypting block failed. */
-				return tb;
-			}
-		}
-
-		/* write block to file. */
-		write(fd, out_buf, out_size);
-
-		/* free output buffer if used. */
-		if (out_buf != NULL) {
-
-			/* free output buffer. */
-			free(out_buf);
-		}
-
-		/* free input buffer if used. */
-		if (in_buf != NULL) {
-
-			/* free input buffer. */
-			free(in_buf);
-		}
-	}
+	/* free output buffer. */
+	free(out_buf);
 
 	/* if no error was found, return zero. */
 	return 0;
@@ -508,7 +272,7 @@ int mpq_extract__extract(char *mpq_filename, unsigned int file_number) {
 	memset(mpq_archive, 0, sizeof(mpq_archive_s));
 
 	/* open the mpq-archive. */
-	if ((result = libmpq__archive_open(mpq_archive, mpq_filename)) < 0) {
+	if ((result = libmpq__archive_open(mpq_archive, mpq_filename, -1)) < 0) {
 
 		/* something on open archive failed. */
 		return result;
@@ -700,6 +464,15 @@ int main(int argc, char **argv) {
 
 	if (!action) {
 		ERROR("%s: no action given.\n", program_name);
+
+		ERROR("Try `%s --help' for more information.\n", program_name);
+
+		/* exit with error. */
+		exit(1);
+	}
+
+	if (optind >= argc) {
+		ERROR("%s: no archive given.\n", program_name);
 
 		ERROR("Try `%s --help' for more information.\n", program_name);
 
