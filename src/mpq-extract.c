@@ -106,18 +106,8 @@ int mpq_extract__list(char *mpq_filename, unsigned int file_number, unsigned int
 	unsigned int i;
 	mpq_archive_s *mpq_archive;
 
-	/* allocate memory for the mpq header and file list. */
-	if ((mpq_archive = malloc(sizeof(mpq_archive_s))) == NULL) {
-
-		/* memory allocation problem. */
-		return LIBMPQ_ERROR_MALLOC;
-	}
-
-	/* cleanup. */
-	memset(mpq_archive, 0, sizeof(mpq_archive_s));
-
 	/* open the mpq-archive. */
-	if ((result = libmpq__archive_open(mpq_archive, mpq_filename, -1)) < 0) {
+	if ((result = libmpq__archive_open(&mpq_archive, mpq_filename, -1)) < 0) {
 
 		/* something on open file failed. */
 		return result;
@@ -197,13 +187,6 @@ int mpq_extract__list(char *mpq_filename, unsigned int file_number, unsigned int
 	/* always close file descriptor, file could be opened also if it is no valid mpq archive. */
 	libmpq__archive_close(mpq_archive);
 
-	/* free mpq archive if used. */
-	if (mpq_archive != NULL) {
-
-		/* free mpq archive. */
-		free(mpq_archive);
-	}
-
 	/* if no error was found, return zero. */
 	return 0;
 }
@@ -261,18 +244,8 @@ int mpq_extract__extract(char *mpq_filename, unsigned int file_number) {
 	int result = 0;
 	int fd = 0;
 
-	/* allocate memory for the mpq header and file list. */
-	if ((mpq_archive = malloc(sizeof(mpq_archive_s))) == NULL) {
-
-		/* memory allocation problem. */
-		return LIBMPQ_ERROR_MALLOC;
-	}
-
-	/* cleanup. */
-	memset(mpq_archive, 0, sizeof(mpq_archive_s));
-
 	/* open the mpq-archive. */
-	if ((result = libmpq__archive_open(mpq_archive, mpq_filename, -1)) < 0) {
+	if ((result = libmpq__archive_open(&mpq_archive, mpq_filename, -1)) < 0) {
 
 		/* something on open archive failed. */
 		return result;
@@ -365,13 +338,6 @@ int mpq_extract__extract(char *mpq_filename, unsigned int file_number) {
 
 	/* always close file descriptor, file could be opened also if it is no valid mpq archive. */
 	libmpq__archive_close(mpq_archive);
-
-	/* free mpq archive if used. */
-	if (mpq_archive != NULL) {
-
-		/* free mpq archive. */
-		free(mpq_archive);
-	}
 
 	/* if no error was found, return zero. */
 	return 0;

@@ -74,12 +74,8 @@ int mpq_info__archive_info(char *program_name, char *mpq_filename, unsigned int 
 	int result;
 	mpq_archive_s *mpq_archive;
 
-	/* allocate memory for the mpq-archive. */
-	mpq_archive = malloc(sizeof(mpq_archive_s));
-	memset(mpq_archive, 0, sizeof(mpq_archive_s));
-
 	/* open the mpq-archive. */
-	if ((result = libmpq__archive_open(mpq_archive, mpq_filename, -1)) < 0) {
+	if ((result = libmpq__archive_open(&mpq_archive, mpq_filename, -1)) < 0) {
 
 		/* open archive failed. */
 		NOTICE("archive number:			%i/%i\n", number, count);
@@ -103,9 +99,6 @@ int mpq_info__archive_info(char *program_name, char *mpq_filename, unsigned int 
 
 		libmpq__archive_close(mpq_archive);
 	}
-
-	/* free the memory of the mpq-archive. */
-	free(mpq_archive);
 
 	/* if multiple archives were given, continue with next one. */
 	if (number < count) {
