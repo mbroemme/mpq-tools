@@ -20,6 +20,10 @@
  *  $Id: mpq-extract.c,v 1.18 2004/02/12 00:39:17 mbroemme Exp $
  */
 
+#ifdef HAVE_CONFIG_H
+# include <config.h>
+#endif
+
 /* generic includes. */
 #include <fcntl.h>
 #include <getopt.h>
@@ -31,9 +35,6 @@
 
 /* libmpq includes. */
 #include "libmpq/mpq.h"
-
-/* mpq-tools configuration includes. */
-#include "config.h"
 
 /* define new print functions for error. */
 #define ERROR(...) fprintf(stderr, __VA_ARGS__);

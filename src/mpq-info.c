@@ -18,6 +18,10 @@
  *  Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA 02111-1307, USA.
  */
 
+#ifdef HAVE_CONFIG_H
+# include <config.h>
+#endif
+
 /* generic includes. */
 #include <getopt.h>
 #include <stdio.h>
@@ -27,9 +31,6 @@
 
 /* libmpq includes. */
 #include "libmpq/mpq.h"
-
-/* mpq-tools configuration includes. */
-#include "config.h"
 
 /* define new print functions for error. */
 #define ERROR(...) fprintf(stderr, __VA_ARGS__);
