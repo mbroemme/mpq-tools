@@ -18,10 +18,6 @@
  *  Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA 02111-1307, USA.
  */
 
-#ifdef HAVE_CONFIG_H
-# include <config.h>
-#endif
-
 /* generic includes. */
 #include <getopt.h>
 #include <stdio.h>
@@ -30,7 +26,10 @@
 #include <limits.h>
 
 /* libmpq includes. */
-#include "libmpq/mpq.h"
+#include <mpq.h>
+
+/* mpq-tools configuration includes. */
+#include "config.h"
 
 /* define new print functions for error. */
 #define ERROR(...) fprintf(stderr, __VA_ARGS__);
@@ -74,6 +73,11 @@ int mpq_info__archive_info(char *program_name, char *mpq_filename, unsigned int 
 
 	/* some common variables. */
 	int result;
+	off_t compressed_size   = 0;
+	off_t uncompressed_size = 0;
+	off_t offset            = 0;
+	unsigned int version    = 0;
+	unsigned int files      = 0;
 	mpq_archive_s *mpq_archive;
 
 	/* open the mpq-archive. */
@@ -86,18 +90,22 @@ int mpq_info__archive_info(char *program_name, char *mpq_filename, unsigned int 
 
 	} else {
 
+		/* fetch some required information. */
+		libmpq__archive_version(mpq_archive, &version);
+		libmpq__archive_offset(mpq_archive, &offset);
+		libmpq__archive_files(mpq_archive, &files);
+		libmpq__archive_compressed_size(mpq_archive, &compressed_size);
+		libmpq__archive_uncompressed_size(mpq_archive, &uncompressed_size);
+
 		/* open archive was successful, show information. */
 		NOTICE("archive number:			%i/%i\n", number, count);
 		NOTICE("archive name:			%s\n", mpq_filename);
-		NOTICE("archive version:		%i\n", libmpq__archive_info(mpq_archive, LIBMPQ_ARCHIVE_VERSION));
-		NOTICE("archive size:			%i\n", libmpq__archive_info(mpq_archive, LIBMPQ_ARCHIVE_SIZE));
-		NOTICE("archive hash table entries:	%i\n", libmpq__archive_info(mpq_archive, LIBMPQ_ARCHIVE_HASHTABLE_ENTRIES));
-		NOTICE("archive block table entries:	%i\n", libmpq__archive_info(mpq_archive, LIBMPQ_ARCHIVE_BLOCKTABLE_ENTRIES));
-		NOTICE("archive block size:		%i\n", libmpq__archive_info(mpq_archive, LIBMPQ_ARCHIVE_BLOCKSIZE));
-		NOTICE("archive files:			%i\n", libmpq__archive_info(mpq_archive, LIBMPQ_ARCHIVE_FILES));
-		NOTICE("archive compressed size:	%i\n", libmpq__archive_info(mpq_archive, LIBMPQ_ARCHIVE_COMPRESSED_SIZE));
-		NOTICE("archive uncompressed size:	%i\n", libmpq__archive_info(mpq_archive, LIBMPQ_ARCHIVE_UNCOMPRESSED_SIZE));
-		NOTICE("archive compression ratio:	%.2f\n", (100 - ((float)libmpq__archive_info(mpq_archive, LIBMPQ_ARCHIVE_COMPRESSED_SIZE) / (float)libmpq__archive_info(mpq_archive, LIBMPQ_ARCHIVE_UNCOMPRESSED_SIZE) * 100)));
+		NOTICE("archive version:		%i\n", version);
+		NOTICE("archive offset:			%li\n", offset);
+		NOTICE("archive files:			%i\n", files);
+		NOTICE("archive compressed size:	%li\n", compressed_size);
+		NOTICE("archive uncompressed size:	%li\n", uncompressed_size);
+		NOTICE("archive compression ratio:	%.2f\n", (100 - ((float)compressed_size / (float)uncompressed_size * 100)));
 
 		libmpq__archive_close(mpq_archive);
 	}
