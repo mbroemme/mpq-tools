@@ -74,43 +74,19 @@ int mpq_extract__version(char *program_name) {
 	return 0;
 }
 
-/* returns the filename for the given file in the archive.
- * if the real filename cannot be retrieved, a dummy name is returned
- * instead.
- */
-static const char *get_filename (mpq_archive_s *mpq_archive, unsigned int file_number) {
-
-	static char buf[PATH_MAX];
-	int ret;
-
-	ret = libmpq__file_name(mpq_archive, file_number, buf, PATH_MAX);
-
-	if (!ret) {
-		unsigned int total_files = 0;
-
-		libmpq__archive_files(mpq_archive, &total_files);
-
-		if (file_number < 1 || file_number > total_files)
-			return NULL;
-
-		snprintf(buf, sizeof(buf), "file%06i.xxx", file_number);
-	}
-
-	return buf;
-}
-
 /* this function will list the archive content. */
 int mpq_extract__list(char *mpq_filename, unsigned int file_number, unsigned int number, unsigned int files) {
 
 	/* some common variables. */
 	int result               = 0;
-	off_t compressed_size    = 0;
-	off_t uncompressed_size  = 0;
+	off_t packed_size        = 0;
+	off_t unpacked_size      = 0;
 	unsigned int total_files = 0;
 	unsigned int encrypted   = 0;
 	unsigned int compressed  = 0;
 	unsigned int imploded    = 0;
 	unsigned int i;
+	static char filename[PATH_MAX];
 	mpq_archive_s *mpq_archive;
 
 	/* open the mpq-archive. */
@@ -124,7 +100,7 @@ int mpq_extract__list(char *mpq_filename, unsigned int file_number, unsigned int
 	libmpq__archive_files(mpq_archive, &total_files);
 
 	/* check if we should process all files. */
-	if (file_number) {
+	if (file_number != -1) {
 
 		/* check if processing multiple files. */
 		if (number > 0 && files > 1 && number < files) {
@@ -133,26 +109,27 @@ int mpq_extract__list(char *mpq_filename, unsigned int file_number, unsigned int
 			NOTICE("\n");
 		}
 
-		if (file_number > total_files) {
+		if (file_number > total_files - 1) {
 			return LIBMPQ_ERROR_EXIST;
 		}
 
 		/* fetch information. */
-		libmpq__file_compressed_size(mpq_archive, i, &compressed_size);
-		libmpq__file_uncompressed_size(mpq_archive, i, &uncompressed_size);
-		libmpq__file_encrypted(mpq_archive, i, &encrypted);
-		libmpq__file_compressed(mpq_archive, i, &compressed);
-		libmpq__file_imploded(mpq_archive, i, &imploded);
+		libmpq__file_packed_size(mpq_archive, file_number, &packed_size);
+		libmpq__file_unpacked_size(mpq_archive, file_number, &unpacked_size);
+		libmpq__file_encrypted(mpq_archive, file_number, &encrypted);
+		libmpq__file_compressed(mpq_archive, file_number, &compressed);
+		libmpq__file_imploded(mpq_archive, file_number, &imploded);
+		libmpq__file_name(mpq_archive, file_number, filename, PATH_MAX);
 
 		/* show the file information. */
 		NOTICE("file number:			%i/%i\n", file_number, total_files);
-		NOTICE("file compressed size:		%li\n", compressed_size);
-		NOTICE("file uncompressed size:		%li\n", uncompressed_size);
-		NOTICE("file compression ratio:		%.2f%%\n", (100 - fabs(((float)compressed_size / (float)uncompressed_size * 100))));
+		NOTICE("file packed size:		%li\n", packed_size);
+		NOTICE("file unpacked size:		%li\n", unpacked_size);
+		NOTICE("file compression ratio:		%.2f%%\n", (100 - fabs(((float)packed_size / (float)unpacked_size * 100))));
 		NOTICE("file compressed:		%s\n", compressed ? "yes" : "no");
 		NOTICE("file imploded:			%s\n", imploded ? "yes" : "no");
 		NOTICE("file encrypted:			%s\n", encrypted ? "yes" : "no");
-		NOTICE("file name:			%s\n", get_filename(mpq_archive, file_number));
+		NOTICE("file name:			%s\n", filename);
 	} else {
 
 		/* show header. */
@@ -160,7 +137,7 @@ int mpq_extract__list(char *mpq_filename, unsigned int file_number, unsigned int
 		NOTICE("------   ----------   ---------   -----   ---   ---   ---   --------\n");
 
 		/* loop through all files. */
-		for (i = 1; i <= total_files; i++) {
+		for (i = 0; i < total_files; i++) {
 
 			/* open the file. */
 			if ((result = libmpq__file_open(mpq_archive, i)) < 0) {
@@ -170,29 +147,30 @@ int mpq_extract__list(char *mpq_filename, unsigned int file_number, unsigned int
 			}
 
 			/* cleanup variables. */
-			compressed_size   = 0;
-			uncompressed_size = 0;
-			encrypted         = 0;
-			compressed        = 0;
-			imploded          = 0;
+			packed_size   = 0;
+			unpacked_size = 0;
+			encrypted     = 0;
+			compressed    = 0;
+			imploded      = 0;
 
 			/* fetch sizes. */
-			libmpq__file_compressed_size(mpq_archive, i, &compressed_size);
-			libmpq__file_uncompressed_size(mpq_archive, i, &uncompressed_size);
+			libmpq__file_packed_size(mpq_archive, i, &packed_size);
+			libmpq__file_unpacked_size(mpq_archive, i, &unpacked_size);
 			libmpq__file_encrypted(mpq_archive, i, &encrypted);
 			libmpq__file_compressed(mpq_archive, i, &compressed);
 			libmpq__file_imploded(mpq_archive, i, &imploded);
+			libmpq__file_name(mpq_archive, i, filename, PATH_MAX);
 
 			/* show file information. */
 			NOTICE("  %4i   %10li   %9li %6.0f%%   %3s   %3s   %3s   %s\n",
 				i,
-				compressed_size,
-				uncompressed_size,
-				(100 - fabs(((float)compressed_size / (float)uncompressed_size * 100))),
+				packed_size,
+				unpacked_size,
+				(100 - fabs(((float)packed_size / (float)unpacked_size * 100))),
 				compressed ? "yes" : "no",
 				imploded ? "yes" : "no",
 				encrypted ? "yes" : "no",
-				get_filename(mpq_archive, i)
+				filename
 			);
 
 			/* close the file. */
@@ -204,16 +182,16 @@ int mpq_extract__list(char *mpq_filename, unsigned int file_number, unsigned int
 		}
 
 		/* fetch sizes. */
-		libmpq__archive_compressed_size(mpq_archive, &compressed_size);
-		libmpq__archive_uncompressed_size(mpq_archive, &uncompressed_size);
+		libmpq__archive_packed_size(mpq_archive, &packed_size);
+		libmpq__archive_unpacked_size(mpq_archive, &unpacked_size);
 
 		/* show footer. */
 		NOTICE("------   ----------   ---------   -----   ---   ---   ---   --------\n");
 		NOTICE("  %4i   %10li   %9li %6.0f%%   %s\n",
 			total_files,
-			uncompressed_size,
-			compressed_size,
-			(100 - fabs(((float)compressed_size / (float)uncompressed_size * 100))),
+			packed_size,
+			unpacked_size,
+			(100 - fabs(((float)packed_size / (float)unpacked_size * 100))),
 			mpq_filename);
 	}
 
@@ -228,7 +206,7 @@ int mpq_extract__list(char *mpq_filename, unsigned int file_number, unsigned int
 int mpq_extract__extract_file(mpq_archive_s *mpq_archive, unsigned int file_number, FILE *fp) {
 
 	/* some common variables. */
-	const char *filename;
+	static char filename[PATH_MAX];
 	unsigned char *out_buf;
 	off_t transferred = 0;
 	off_t out_size    = 0;
@@ -241,8 +219,10 @@ int mpq_extract__extract_file(mpq_archive_s *mpq_archive, unsigned int file_numb
 		return result;
 	}
 
+	libmpq__file_name(mpq_archive, file_number, filename, PATH_MAX);
+
 	/* get/show filename to extract. */
-	if ((filename = get_filename(mpq_archive, file_number)) == NULL) {
+	if (filename == NULL) {
 
 		/* filename was not found. */
 		return LIBMPQ_ERROR_EXIST;
@@ -250,7 +230,7 @@ int mpq_extract__extract_file(mpq_archive_s *mpq_archive, unsigned int file_numb
 
 	NOTICE("extracting %s\n", filename);
 
-	libmpq__file_uncompressed_size(mpq_archive, file_number, &out_size);
+	libmpq__file_unpacked_size(mpq_archive, file_number, &out_size);
 
 	if ((out_buf = malloc(out_size)) == NULL)
 		return LIBMPQ_ERROR_MALLOC;
@@ -272,7 +252,7 @@ int mpq_extract__extract(char *mpq_filename, unsigned int file_number) {
 
 	/* some common variables. */
 	mpq_archive_s *mpq_archive;
-	const char *filename;
+	static char filename[PATH_MAX];
 	unsigned int i;
 	unsigned int total_files = 0;
 	int result               = 0;
@@ -286,10 +266,12 @@ int mpq_extract__extract(char *mpq_filename, unsigned int file_number) {
 	}
 
 	/* check if we should process all files. */
-	if (file_number) {
+	if (file_number != -1) {
 
 		/* get filename. */
-		if ((filename = get_filename(mpq_archive, file_number)) == NULL) {
+		libmpq__file_name(mpq_archive, file_number, filename, PATH_MAX);
+
+		if (filename == NULL) {
 
 			/* filename was not found. */
 			return LIBMPQ_ERROR_EXIST;
@@ -331,10 +313,13 @@ int mpq_extract__extract(char *mpq_filename, unsigned int file_number) {
 		libmpq__archive_files(mpq_archive, &total_files);
 
 		/* loop through all files. */
-		for (i = 1; i <= total_files; i++) {
+		for (i = 0; i < total_files; i++) {
 
 			/* get filename. */
-			if ((filename = get_filename(mpq_archive, i)) == NULL) {
+			libmpq__file_name(mpq_archive, i, filename, PATH_MAX);
+
+			/* check if file exist. */
+			if (filename == NULL) {
 
 				/* filename was not found. */
 				return LIBMPQ_ERROR_EXIST;
@@ -510,13 +495,13 @@ int main(int argc, char **argv) {
 		if (action == 1) {
 
 			/* process archive. */
-			result = mpq_extract__list(mpq_filename, file_number, argc - optind, count);
+			result = mpq_extract__list(mpq_filename, file_number - 1, argc - optind, count);
 		}
 
 		/* check if we should extract archive content. */
 		if (action == 2) {
 			/* extract archive content. */
-			result = mpq_extract__extract(mpq_filename, file_number);
+			result = mpq_extract__extract(mpq_filename, file_number - 1);
 		}
 
 		/* check if archive was correctly opened. */

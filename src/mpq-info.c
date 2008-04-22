@@ -73,11 +73,11 @@ int mpq_info__archive_info(char *program_name, char *mpq_filename, unsigned int 
 
 	/* some common variables. */
 	int result;
-	off_t compressed_size   = 0;
-	off_t uncompressed_size = 0;
-	off_t offset            = 0;
-	unsigned int version    = 0;
-	unsigned int files      = 0;
+	off_t packed_size    = 0;
+	off_t unpacked_size  = 0;
+	off_t offset         = 0;
+	unsigned int version = 0;
+	unsigned int files   = 0;
 	mpq_archive_s *mpq_archive;
 
 	/* open the mpq-archive. */
@@ -94,8 +94,8 @@ int mpq_info__archive_info(char *program_name, char *mpq_filename, unsigned int 
 		libmpq__archive_version(mpq_archive, &version);
 		libmpq__archive_offset(mpq_archive, &offset);
 		libmpq__archive_files(mpq_archive, &files);
-		libmpq__archive_compressed_size(mpq_archive, &compressed_size);
-		libmpq__archive_uncompressed_size(mpq_archive, &uncompressed_size);
+		libmpq__archive_packed_size(mpq_archive, &packed_size);
+		libmpq__archive_unpacked_size(mpq_archive, &unpacked_size);
 
 		/* open archive was successful, show information. */
 		NOTICE("archive number:			%i/%i\n", number, count);
@@ -103,9 +103,9 @@ int mpq_info__archive_info(char *program_name, char *mpq_filename, unsigned int 
 		NOTICE("archive version:		%i\n", version);
 		NOTICE("archive offset:			%li\n", offset);
 		NOTICE("archive files:			%i\n", files);
-		NOTICE("archive compressed size:	%li\n", compressed_size);
-		NOTICE("archive uncompressed size:	%li\n", uncompressed_size);
-		NOTICE("archive compression ratio:	%.2f\n", (100 - ((float)compressed_size / (float)uncompressed_size * 100)));
+		NOTICE("archive packed size:		%li\n", packed_size);
+		NOTICE("archive unpacked size:		%li\n", unpacked_size);
+		NOTICE("archive compression ratio:	%.2f\n", (100 - ((float)packed_size / (float)unpacked_size * 100)));
 
 		libmpq__archive_close(mpq_archive);
 	}
