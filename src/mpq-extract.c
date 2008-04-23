@@ -139,13 +139,6 @@ int mpq_extract__list(char *mpq_filename, unsigned int file_number, unsigned int
 		/* loop through all files. */
 		for (i = 0; i < total_files; i++) {
 
-			/* open the file. */
-			if ((result = libmpq__file_open(mpq_archive, i)) < 0) {
-
-				/* something on open file failed. */
-				return result;
-			}
-
 			/* cleanup variables. */
 			packed_size   = 0;
 			unpacked_size = 0;
@@ -172,14 +165,11 @@ int mpq_extract__list(char *mpq_filename, unsigned int file_number, unsigned int
 				encrypted ? "yes" : "no",
 				filename
 			);
-
-			/* close the file. */
-			if ((result = libmpq__file_close(mpq_archive, i)) < 0) {
-
-				/* something on close file failed. */
-				return result;
-			}
 		}
+
+		/* cleanup variables. */
+		packed_size   = 0;
+		unpacked_size = 0;
 
 		/* fetch sizes. */
 		libmpq__archive_packed_size(mpq_archive, &packed_size);
