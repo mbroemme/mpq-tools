@@ -17,6 +17,7 @@ AC_REVISION($Revision: 1.6 $)
 
 # checking for programs.
 AC_PROG_CC
+AC_SYS_LARGEFILE
 
 # check for libmpq.
 PKG_CHECK_MODULES([LIBMPQ], [libmpq >= 0.4.1], [HAVE_LIBMPQ="yes"], [AC_MSG_ERROR([*** $LIBMPQ_PKG_ERRORS])])
