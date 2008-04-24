@@ -18,6 +18,9 @@
  *  Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA 02111-1307, USA.
  */
 
+/* mpq-tools configuration includes. */
+#include "config.h"
+
 /* generic includes. */
 #include <getopt.h>
 #include <stdio.h>
@@ -27,9 +30,6 @@
 
 /* libmpq includes. */
 #include <mpq.h>
-
-/* mpq-tools configuration includes. */
-#include "config.h"
 
 /* define new print functions for error. */
 #define ERROR(...) fprintf(stderr, __VA_ARGS__);
@@ -101,10 +101,10 @@ int mpq_info__archive_info(char *program_name, char *mpq_filename, unsigned int 
 		NOTICE("archive number:			%i/%i\n", number, count);
 		NOTICE("archive name:			%s\n", mpq_filename);
 		NOTICE("archive version:		%i\n", version);
-		NOTICE("archive offset:			%li\n", offset);
+		NOTICE("archive offset:			%lli\n", offset);
 		NOTICE("archive files:			%i\n", files);
-		NOTICE("archive packed size:		%li\n", packed_size);
-		NOTICE("archive unpacked size:		%li\n", unpacked_size);
+		NOTICE("archive packed size:		%lli\n", packed_size);
+		NOTICE("archive unpacked size:i		%lli\n", unpacked_size);
 		NOTICE("archive compression ratio:	%.2f\n", (100 - ((float)packed_size / (float)unpacked_size * 100)));
 
 		libmpq__archive_close(mpq_archive);

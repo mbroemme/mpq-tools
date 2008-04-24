@@ -20,6 +20,9 @@
  *  $Id: mpq-extract.c,v 1.18 2004/02/12 00:39:17 mbroemme Exp $
  */
 
+/* mpq-tools configuration includes. */
+#include "config.h"
+
 /* generic includes. */
 #include <fcntl.h>
 #include <getopt.h>
@@ -31,9 +34,6 @@
 
 /* libmpq includes. */
 #include <mpq.h>
-
-/* mpq-tools configuration includes. */
-#include "config.h"
 
 /* define new print functions for error. */
 #define ERROR(...) fprintf(stderr, __VA_ARGS__);
@@ -155,7 +155,7 @@ int mpq_extract__list(char *mpq_filename, unsigned int file_number, unsigned int
 			libmpq__file_name(mpq_archive, i, filename, PATH_MAX);
 
 			/* show file information. */
-			NOTICE("  %4i   %10li   %9li %6.0f%%   %3s   %3s   %3s   %s\n",
+			NOTICE("  %4i   %10lli   %9lli %6.0f%%   %3s   %3s   %3s   %s\n",
 				i,
 				packed_size,
 				unpacked_size,
@@ -177,7 +177,7 @@ int mpq_extract__list(char *mpq_filename, unsigned int file_number, unsigned int
 
 		/* show footer. */
 		NOTICE("------   ----------   ---------   -----   ---   ---   ---   --------\n");
-		NOTICE("  %4i   %10li   %9li %6.0f%%   %s\n",
+		NOTICE("  %4i   %10lli   %9lli %6.0f%%   %s\n",
 			total_files,
 			packed_size,
 			unpacked_size,
