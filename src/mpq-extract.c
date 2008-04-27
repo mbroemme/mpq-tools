@@ -202,13 +202,6 @@ int mpq_extract__extract_file(mpq_archive_s *mpq_archive, unsigned int file_numb
 	off_t out_size    = 0;
 	int result        = 0;
 
-	/* open the file. */
-	if ((result = libmpq__file_open(mpq_archive, file_number)) < 0) {
-
-		/* something on open file failed. */
-		return result;
-	}
-
 	libmpq__file_name(mpq_archive, file_number, filename, PATH_MAX);
 
 	/* get/show filename to extract. */
