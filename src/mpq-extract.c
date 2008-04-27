@@ -218,7 +218,7 @@ int mpq_extract__extract_file(mpq_archive_s *mpq_archive, unsigned int file_numb
 	if ((out_buf = malloc(out_size)) == NULL)
 		return LIBMPQ_ERROR_MALLOC;
 
-	if ((result = libmpq__file_read(mpq_archive, out_buf, out_size, file_number, &transferred)) < 0)
+	if ((result = libmpq__file_read(mpq_archive, file_number, out_buf, out_size, &transferred)) < 0)
 		return result;
 
 	fwrite(out_buf, 1, out_size, fp);
