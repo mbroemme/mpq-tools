@@ -37,6 +37,13 @@
 /* define new print functions for notification. */
 #define NOTICE(...) printf(__VA_ARGS__);
 
+/* define size of off_t */
+#if _FILE_OFFSET_BITS == 64
+#define OFFTSTR "lli"
+#else
+#define OFFTSTR "li"
+#endif
+
 /* this function show the usage. */
 int mpq_info__usage(char *program_name) {
 
@@ -101,10 +108,10 @@ int mpq_info__archive_info(char *program_name, char *mpq_filename, unsigned int 
 		NOTICE("archive number:			%i/%i\n", number, count);
 		NOTICE("archive name:			%s\n", mpq_filename);
 		NOTICE("archive version:		%i\n", version);
-		NOTICE("archive offset:			%lli\n", offset);
+		NOTICE("archive offset:			%" OFFTSTR "\n", offset);
 		NOTICE("archive files:			%i\n", files);
-		NOTICE("archive packed size:		%lli\n", packed_size);
-		NOTICE("archive unpacked size:i		%lli\n", unpacked_size);
+		NOTICE("archive packed size:		%" OFFTSTR "\n", packed_size);
+		NOTICE("archive unpacked size:i		%" OFFTSTR "\n", unpacked_size);
 		NOTICE("archive compression ratio:	%.2f\n", (100 - ((float)packed_size / (float)unpacked_size * 100)));
 
 		libmpq__archive_close(mpq_archive);

@@ -41,6 +41,13 @@
 /* define new print functions for notification. */
 #define NOTICE(...) printf(__VA_ARGS__);
 
+/* define size of off_t */
+#if _FILE_OFFSET_BITS == 64
+#define OFFTSTR "lli"
+#else
+#define OFFTSTR "li"
+#endif
+
 /* this function show the usage. */
 int mpq_extract__usage(char *program_name) {
 
@@ -123,8 +130,8 @@ int mpq_extract__list(char *mpq_filename, unsigned int file_number, unsigned int
 
 		/* show the file information. */
 		NOTICE("file number:			%i/%i\n", file_number, total_files);
-		NOTICE("file packed size:		%li\n", packed_size);
-		NOTICE("file unpacked size:		%li\n", unpacked_size);
+		NOTICE("file packed size:		%" OFFTSTR "\n", packed_size);
+		NOTICE("file unpacked size:		%" OFFTSTR "\n", unpacked_size);
 		NOTICE("file compression ratio:		%.2f%%\n", (100 - fabs(((float)packed_size / (float)unpacked_size * 100))));
 		NOTICE("file compressed:		%s\n", compressed ? "yes" : "no");
 		NOTICE("file imploded:			%s\n", imploded ? "yes" : "no");
@@ -155,7 +162,7 @@ int mpq_extract__list(char *mpq_filename, unsigned int file_number, unsigned int
 			libmpq__file_name(mpq_archive, i, filename, PATH_MAX);
 
 			/* show file information. */
-			NOTICE("  %4i   %10lli   %9lli %6.0f%%   %3s   %3s   %3s   %s\n",
+			NOTICE("  %4i   %10" OFFTSTR "   %9" OFFTSTR " %6.0f%%   %3s   %3s   %3s   %s\n",
 				i,
 				packed_size,
 				unpacked_size,
@@ -177,7 +184,7 @@ int mpq_extract__list(char *mpq_filename, unsigned int file_number, unsigned int
 
 		/* show footer. */
 		NOTICE("------   ----------   ---------   -----   ---   ---   ---   --------\n");
-		NOTICE("  %4i   %10lli   %9lli %6.0f%%   %s\n",
+		NOTICE("  %4i   %10" OFFTSTR "   %9" OFFTSTR " %6.0f%%   %s\n",
 			total_files,
 			packed_size,
 			unpacked_size,
