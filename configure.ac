@@ -1,5 +1,5 @@
 # the autoconf initilization.
-AC_INIT(mpq-tools, 0.4.1, [mbroemme@plusserver.de], [mpq-tools])
+AC_INIT(mpq-tools, 0.4.2, [mbroemme@plusserver.de], [mpq-tools])
 
 # detect the canonical host and target build environment.
 AC_CANONICAL_SYSTEM
@@ -21,7 +21,7 @@ AC_SYS_LARGEFILE
 AC_FUNC_FSEEKO
 
 # check for libmpq.
-PKG_CHECK_MODULES([LIBMPQ], [libmpq >= 0.4.1], [HAVE_LIBMPQ="yes"], [AC_MSG_ERROR([*** $LIBMPQ_PKG_ERRORS])])
+PKG_CHECK_MODULES([LIBMPQ], [libmpq >= 0.4.2], [HAVE_LIBMPQ="yes"], [AC_MSG_ERROR([*** $LIBMPQ_PKG_ERRORS])])
 AC_SUBST(LIBMPQ_CFLAGS)
 AC_SUBST(LIBMPQ_LIBS)
 
