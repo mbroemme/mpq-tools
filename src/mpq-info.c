@@ -111,7 +111,7 @@ int mpq_info__archive_info(char *program_name, char *mpq_filename, unsigned int 
 		NOTICE("archive offset:			%" OFFTSTR "\n", offset);
 		NOTICE("archive files:			%i\n", files);
 		NOTICE("archive packed size:		%" OFFTSTR "\n", packed_size);
-		NOTICE("archive unpacked size:i		%" OFFTSTR "\n", unpacked_size);
+		NOTICE("archive unpacked size:		%" OFFTSTR "\n", unpacked_size);
 		NOTICE("archive compression ratio:	%.2f\n", (100 - ((float)packed_size / (float)unpacked_size * 100)));
 
 		libmpq__archive_close(mpq_archive);
