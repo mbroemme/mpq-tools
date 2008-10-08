@@ -464,8 +464,6 @@ int main(int argc, char **argv) {
 	/* count number of files to process in archive. */
 	count = argc - optind;
 
-	libmpq__init ();
-
 	/* process file names. */
 	do {
 		unsigned int file_number = 0;
@@ -476,7 +474,6 @@ int main(int argc, char **argv) {
 			/* check whether we were given a (valid) file number. */
 			if (!file_number) {
 				ERROR("%s: invalid file number '%s'\n", program_name, argv[optind]);
-				libmpq__shutdown ();
 				exit(1);
 			}
 		}
@@ -501,7 +498,6 @@ int main(int argc, char **argv) {
 			ERROR("%s: '%s' no such file or directory\n", program_name, mpq_filename);
 
 			/* if archive did not exist, we can stop everything. :) */
-			libmpq__shutdown ();
 			exit(1);
 		}
 
@@ -517,6 +513,5 @@ int main(int argc, char **argv) {
 	} while (++optind < argc);
 
 	/* execution was successful. */
-	libmpq__shutdown ();
 	exit(0);
 }

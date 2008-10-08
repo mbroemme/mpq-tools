@@ -195,16 +195,12 @@ int main(int argc, char **argv) {
 	count = argc - optind;
 	number = 1;
 
-	libmpq__init ();
-
 	/* create the file count from the command line arguments. */
 	do {
 		strncpy(mpq_filename, argv[optind], PATH_MAX);
 		mpq_info__archive_info(program_name, mpq_filename, number, count);
 		number++;
 	} while (++optind < argc);
-
-	libmpq__shutdown ();
 
 	/* execution was successful. */
 	exit(0);
