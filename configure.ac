@@ -20,8 +20,29 @@ AC_PROG_CC
 AC_SYS_LARGEFILE
 AC_FUNC_FSEEKO
 
-# check for libmpq.
-PKG_CHECK_MODULES([LIBMPQ], [libmpq >= 0.4.2], [HAVE_LIBMPQ="yes"], [AC_MSG_ERROR([*** $LIBMPQ_PKG_ERRORS])])
+# checking for pkg-config.
+AC_CHECK_PROG([have_pkg_config], [pkg-config], [yes])
+
+# checking if we have pkg-config or not.
+if test "$have_pkg_config" = "yes"; then
+
+	# checking for libmpq.
+	PKG_CHECK_MODULES([LIBMPQ], [libmpq >= 0.4.2], [HAVE_LIBMPQ="yes"], [AC_MSG_ERROR([*** $LIBMPQ_PKG_ERRORS])])
+fi
+if test -z "$have_pkg_config"; then
+
+	# checking for mpq library.
+	AC_CHECK_HEADER([libmpq/mpq.h], [], [AC_MSG_ERROR([*** mpq.h is required, install libmpq header files])])
+	AC_PATH_PROG([libmpq_config], [libmpq-config], [AC_MSG_ERROR([*** libmpq-config is required, install libmpq development files])])
+
+	# checking for libmpq environment.
+	if test -n "$libmpq_config"; then
+		LIBMPQ_CFLAGS="$(libmpq-config --cflags)"
+		LIBMPQ_LIBS="$(libmpq-config --libs)"
+	fi
+fi
+
+# export library flags.
 AC_SUBST(LIBMPQ_CFLAGS)
 AC_SUBST(LIBMPQ_LIBS)
 
