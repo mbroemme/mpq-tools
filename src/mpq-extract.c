@@ -81,6 +81,18 @@ int mpq_extract__version(char *program_name) {
 	return 0;
 }
 
+/* XXX: this is a hack to make mpq-tools compile until proper
+ * listfile support is added. */
+int32_t libmpq__file_name(mpq_archive_s *mpq_archive, uint32_t file_number, char *filename, size_t filename_size) {
+
+	int32_t result = 0;
+
+	if ((result = snprintf(filename, filename_size, "file%06i.xxx", file_number)) < 0) {
+		return LIBMPQ_ERROR_FORMAT;
+	}
+	return result;
+}
+
 /* this function will list the archive content. */
 int mpq_extract__list(char *mpq_filename, unsigned int file_number, unsigned int number, unsigned int files) {
 
