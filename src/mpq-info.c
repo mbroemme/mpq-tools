@@ -80,8 +80,8 @@ int mpq_info__archive_info(char *program_name, char *mpq_filename, unsigned int 
 
 	/* some common variables. */
 	int result;
-	off_t packed_size    = 0;
-	off_t unpacked_size  = 0;
+	off_t size_packed    = 0;
+	off_t size_unpacked  = 0;
 	off_t offset         = 0;
 	unsigned int version = 0;
 	unsigned int files   = 0;
@@ -101,8 +101,8 @@ int mpq_info__archive_info(char *program_name, char *mpq_filename, unsigned int 
 		libmpq__archive_version(mpq_archive, &version);
 		libmpq__archive_offset(mpq_archive, &offset);
 		libmpq__archive_files(mpq_archive, &files);
-		libmpq__archive_packed_size(mpq_archive, &packed_size);
-		libmpq__archive_unpacked_size(mpq_archive, &unpacked_size);
+		libmpq__archive_size_packed(mpq_archive, &size_packed);
+		libmpq__archive_size_unpacked(mpq_archive, &size_unpacked);
 
 		/* open archive was successful, show information. */
 		NOTICE("archive number:			%i/%i\n", number, count);
@@ -110,9 +110,9 @@ int mpq_info__archive_info(char *program_name, char *mpq_filename, unsigned int 
 		NOTICE("archive version:		%i\n", version);
 		NOTICE("archive offset:			%" OFFTSTR "\n", offset);
 		NOTICE("archive files:			%i\n", files);
-		NOTICE("archive packed size:		%" OFFTSTR "\n", packed_size);
-		NOTICE("archive unpacked size:		%" OFFTSTR "\n", unpacked_size);
-		NOTICE("archive compression ratio:	%.2f\n", (100 - ((float)packed_size / (float)unpacked_size * 100)));
+		NOTICE("archive packed size:		%" OFFTSTR "\n", size_packed);
+		NOTICE("archive unpacked size:		%" OFFTSTR "\n", size_unpacked);
+		NOTICE("archive compression ratio:	%.2f\n", (100 - ((float)size_packed / (float)size_unpacked * 100)));
 
 		libmpq__archive_close(mpq_archive);
 	}
