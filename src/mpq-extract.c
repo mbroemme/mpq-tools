@@ -59,6 +59,7 @@ int mpq_extract__usage(char *program_name) {
 	NOTICE("  -v, --version		shows the version information\n");
 	NOTICE("  -e, --extract		extract files from the given mpq archive\n");
 	NOTICE("  -l, --list		list the contents of the mpq archive\n");
+	NOTICE("  -n, --name		extract one or more files by name\n");
 	NOTICE("\n");
 	NOTICE("Please report bugs to the appropriate authors, which can be found in the\n");
 	NOTICE("version information. All other things can be send to <%s>\n", PACKAGE_BUGREPORT);
@@ -367,6 +368,78 @@ int mpq_extract__extract(char *mpq_filename, unsigned int file_number) {
 	return 0;
 }
 
+int mpq_extract__file_by_name(char *mpq_filename, char **argv, int arg_first, int arg_last) {
+	/* some common variables. */
+	int result = 0;
+	mpq_archive_s *mpq_archive;
+	FILE *fp;
+	unsigned char *out_buf;
+	off_t transferred = 0;
+	off_t out_size = 0;
+	int32_t file_number;
+	char *filename;
+	
+	/* open the mpq-archive. */
+	if ((result = libmpq__archive_open(&mpq_archive, mpq_filename, -1)) < 0) {
+		/* something on open file failed. */
+		return result;
+	}
+	
+	int i;
+	for (i = arg_first; i < arg_last; i++) {
+		file_number = -1;
+		filename = argv[i];
+		
+		NOTICE("Extracting %s\n", filename);
+		
+		/* get file number by name */
+		libmpq__file_number(mpq_archive, filename, &file_number);
+	
+		if (file_number == -1) {
+			ERROR("No such file or directory\n");
+			continue;
+		}
+		
+		/* open file for writing. */
+		if ((fp = fopen(filename, "wb")) == NULL) {
+			/* open file failed. */
+			ERROR("Failed to create file\n");
+			continue;
+		}
+	
+		libmpq__file_size_unpacked(mpq_archive, file_number, &out_size);
+
+		if ((out_buf = malloc(out_size)) == NULL) {
+			ERROR("Failed to allocate buffer\n");
+			continue;
+		}
+
+		if ((result = libmpq__file_read(mpq_archive, file_number, out_buf, out_size, &transferred)) < 0) {
+			/*/ fix a memory leak */
+			free(out_buf);
+			ERROR("Failed to extract file\n");
+			continue;
+		}
+		/* write to file */
+		fwrite(out_buf, 1, out_size, fp);
+		/* free output buffer. */
+		free(out_buf);
+
+		/* extract file. */
+		/* close file. */
+		if ((fclose(fp)) < 0) {
+			/* close file failed. */
+			ERROR("Failed to close file\n");
+			continue;
+		}
+		
+		NOTICE("OK\n");
+	}
+	/* always close file descriptor, file could be opened also if it is no valid mpq archive. */
+	libmpq__archive_close(mpq_archive);
+	return 0;
+}
+
 /* the main function starts here. */
 int main(int argc, char **argv) {
 
@@ -374,12 +447,13 @@ int main(int argc, char **argv) {
 	int result;
 	int opt;
 	int option_index = 0;
-	static char const short_options[] = "hvelf:";
+	static char const short_options[] = "hvelnf:";
 	static struct option const long_options[] = {
 		{"help",	no_argument,		0,	'h'},
 		{"version",	no_argument,		0,	'v'},
 		{"extract",	no_argument,		0,	'e'},
 		{"list",	no_argument,		0,	'l'},
+		{"name",	no_argument,		0,	'n'},
 		{0,		0,			0,	0}
 	};
 	optind = 0;
@@ -441,6 +515,15 @@ int main(int argc, char **argv) {
 			case 'e':
 				action = 2;
 				continue;
+			case 'n':
+				strncpy(mpq_filename, argv[1], PATH_MAX);
+				// get rest of names
+				if (argc <= 3) {
+					ERROR("Missing filenames to extract\n");
+					exit(1);
+				}
+				mpq_extract__file_by_name(mpq_filename, argv, 3, argc);
+				exit(0);
 			default:
 
 				/* show some info on how to get help. :) */
