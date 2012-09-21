@@ -517,7 +517,7 @@ int main(int argc, char **argv) {
 				action = 2;
 				continue;
 			case 'n':
-				strncpy(mpq_filename, argv[1], PATH_MAX);
+				strncpy(mpq_filename, argv[2], PATH_MAX);
 				// get rest of names
 				if (argc <= 3) {
 					ERROR("Missing filenames to extract\n");
