@@ -382,7 +382,7 @@ int mpq_extract__file_by_name(char *mpq_filename, char **argv, int arg_first, in
 	/* open the mpq-archive. */
 	if ((result = libmpq__archive_open(&mpq_archive, mpq_filename, -1)) < 0) {
 		/* something on open file failed. */
-    NOTICE("Failed to open MPQ archive\n");
+		ERROR("Failed to open %s\n", filename);
 		return result;
 	}
 	
@@ -397,28 +397,28 @@ int mpq_extract__file_by_name(char *mpq_filename, char **argv, int arg_first, in
 		libmpq__file_number(mpq_archive, filename, &file_number);
 	
 		if (file_number == -1) {
-			NOTICE("No such file or directory\n");
+			ERROR("No such file or directory\n");
 			continue;
 		}
 		
 		/* open file for writing. */
 		if ((fp = fopen(filename, "wb")) == NULL) {
 			/* open file failed. */
-			NOTICE("Failed to create file\n");
+			ERROR("Failed to create file\n");
 			continue;
 		}
 	
 		libmpq__file_size_unpacked(mpq_archive, file_number, &out_size);
 
 		if ((out_buf = malloc(out_size)) == NULL) {
-			NOTICE("Failed to allocate buffer\n");
+			ERROR("Failed to allocate buffer\n");
 			continue;
 		}
 
 		if ((result = libmpq__file_read(mpq_archive, file_number, out_buf, out_size, &transferred)) < 0) {
 			/*/ fix a memory leak */
 			free(out_buf);
-			NOTICE("Failed to extract file\n");
+			ERROR("Failed to extract file\n");
 			continue;
 		}
 		/* write to file */
@@ -430,7 +430,7 @@ int mpq_extract__file_by_name(char *mpq_filename, char **argv, int arg_first, in
 		/* close file. */
 		if ((fclose(fp)) < 0) {
 			/* close file failed. */
-			NOTICE("Failed to close file\n");
+			ERROR("Failed to close file\n");
 			continue;
 		}
 		
