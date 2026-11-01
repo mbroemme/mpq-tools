@@ -1,5 +1,19 @@
 # mpq-tools
 
+[![CI](https://github.com/mbroemme/mpq-tools/actions/workflows/ci.yml/badge.svg)](https://github.com/mbroemme/mpq-tools/actions/workflows/ci.yml)
+[![GitHub
+release](https://img.shields.io/github/release/mbroemme/mpq-tools?style=flat&label=release&cacheSeconds=21600)](https://github.com/mbroemme/mpq-tools/releases)
+[![GitHub
+issues](https://img.shields.io/github/issues/mbroemme/mpq-tools?style=flat&label=issues&cacheSeconds=21600)](https://github.com/mbroemme/mpq-tools/issues)
+[![GitHub
+forks](https://img.shields.io/github/forks/mbroemme/mpq-tools?style=flat&label=forks&cacheSeconds=21600)](https://github.com/mbroemme/mpq-tools/network/members)
+[![GitHub
+stars](https://img.shields.io/github/stars/mbroemme/mpq-tools?style=flat&label=stars&cacheSeconds=21600)](https://github.com/mbroemme/mpq-tools/stargazers)
+[![License:
+GPL-2.0-or-later](https://img.shields.io/badge/license-GPL--2.0--or--later-blue.svg)](COPYING)
+[![GitHub
+downloads](https://img.shields.io/github/downloads/mbroemme/mpq-tools/total?style=flat&label=downloads&cacheSeconds=21600)](https://github.com/mbroemme/mpq-tools/releases)
+
 Command-line utilities for inspecting MoPaQ (MPQ) archives and extracting
 their members.
 
