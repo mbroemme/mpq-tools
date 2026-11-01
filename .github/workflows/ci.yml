@@ -78,26 +78,25 @@ jobs:
           set -euxo pipefail
           git config --global --add safe.directory "${GITHUB_WORKSPACE}"
 
-      - name: Check out the libmpq revision used by the existing sources
+      - name: Check out libmpq
         uses: actions/checkout@v7
         with:
           repository: mbroemme/libmpq
-          ref: 60c1e1a35dfca47b03768b00248166eb4849647f
+          ref: 911c5b6fbc863631ea65328ed2cecb1173f782a1 # v0.5.0
           path: .lint-libmpq
           persist-credentials: false
 
-      - name: Install historical libmpq
+      - name: Install libmpq
         working-directory: .lint-libmpq
         run: |
           set -euxo pipefail
           prefix="$(mktemp -d)"
           sh -e autogen.sh
-          # On the 64-bit runner, off_t is already 64 bits. The legacy large-file
-          # probe would export an empty _FILE_OFFSET_BITS with modern Autoconf.
-          ./configure --prefix="${prefix}" --disable-static --disable-largefile CC=cc
-          make -j"$(nproc)" -C libmpq
-          make -C libmpq install
-          install -Dm644 libmpq.pc "${prefix}/lib/pkgconfig/libmpq.pc"
+          ./configure --prefix="${prefix}"
+          make -j"$(nproc)" -C src
+          make -C src install
+          make -C include/libmpq install
+          make install-pkgconfigDATA
           printf 'PKG_CONFIG_PATH=%s/lib/pkgconfig\n' "${prefix}" >> "${GITHUB_ENV}"
 
       - name: Run source checks

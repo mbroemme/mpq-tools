@@ -35,50 +35,15 @@ On Linux, use a C compiler, GNU make, pkg-config, and a compatible
 [libmpq](https://github.com/mbroemme/libmpq) development installation. A Git
 checkout also requires GNU Autoconf and Automake.
 
-The build checks for libmpq 0.4.2 or later through pkg-config. It requires
-the historical ABI used by this checkout. The CI build uses
-[libmpq commit `60c1e1a`](https://github.com/mbroemme/libmpq/commit/60c1e1a35dfca47b03768b00248166eb4849647f),
-which reports version 0.4.2 and exports the required size functions. The
-version check alone does not establish compatibility.
+Use a libmpq development package from version 0.5.0 through 0.6.1. The build
+uses pkg-config to find it. libmpq 0.7.0 removed the file flag queries used
+by `mpq-extract`.
 
 ## Building and installation
 
-### Preparing the historical dependency
-
-If you do not already have the compatible libmpq development files, build
-the pinned revision on 64-bit Linux from a directory beside mpq-tools.
-Building this dependency also requires Git, GNU Libtool, and the zlib and
-bzip2 development headers and libraries. On Debian, the build packages are
-`build-essential`, `git`, `autoconf`, `automake`, `libtool`, `pkg-config`,
-`zlib1g-dev`, and `libbz2-dev`.
-
-```sh
-git clone https://github.com/mbroemme/libmpq.git libmpq-historical
-cd libmpq-historical
-git checkout --detach 60c1e1a35dfca47b03768b00248166eb4849647f
-
-libmpq_prefix="$HOME/.local/libmpq-mpq-tools"
-sh -e autogen.sh
-./configure --prefix="$libmpq_prefix" --disable-static --disable-largefile
-make -C libmpq
-make -C libmpq install
-install -Dm644 libmpq.pc "$libmpq_prefix/lib/pkgconfig/libmpq.pc"
-```
-
-The historical large-file probe can emit an empty `_FILE_OFFSET_BITS`
-definition with modern Autoconf. The dependency build uses
-`--disable-largefile` on 64-bit Linux, where `off_t` is already 64 bits.
-
-Run the following in the shell where you will build and use mpq-tools if
-you installed libmpq in the private prefix above:
-
-```sh
-libmpq_prefix="$HOME/.local/libmpq-mpq-tools"
-export PKG_CONFIG_PATH="$libmpq_prefix/lib/pkgconfig${PKG_CONFIG_PATH:+:$PKG_CONFIG_PATH}"
-export LD_LIBRARY_PATH="$libmpq_prefix/lib${LD_LIBRARY_PATH:+:$LD_LIBRARY_PATH}"
-```
-
-### Building mpq-tools
+If you installed libmpq in a private prefix, add its pkg-config directory
+to `PKG_CONFIG_PATH` and make its shared library available to the runtime
+loader.
 
 From the mpq-tools source directory:
 
@@ -132,7 +97,7 @@ The last command extracts the first and third members as
 The utilities provide read-only archive operations. The extractor uses
 generated names and requires numeric member selection for individual
 files. Archive and compression support is limited to what the linked
-historical libmpq can read.
+libmpq can read.
 
 ## Documentation
 

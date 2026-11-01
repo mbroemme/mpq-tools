@@ -16,7 +16,7 @@ AC_PROG_CC
 AC_SYS_LARGEFILE
 
 # Check for required libraries.
-PKG_CHECK_MODULES([LIBMPQ], [libmpq >= 0.4.2])
+PKG_CHECK_MODULES([LIBMPQ], [libmpq >= 0.5.0 libmpq < 0.7.0])
 
 # Generate the remaining package build files.
 AC_CONFIG_FILES([

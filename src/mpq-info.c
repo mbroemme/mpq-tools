@@ -28,7 +28,7 @@
 #include <string.h>
 
 /* libmpq includes. */
-#include <mpq.h>
+#include <libmpq/mpq.h>
 
 /* define new print functions for error. */
 #define ERROR(...) fprintf(stderr, __VA_ARGS__);
