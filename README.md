@@ -103,8 +103,8 @@ libmpq can read.
 
 The installed manuals are available through `man mpq-info` and
 `man mpq-extract`. The source files are
-[`mpq-info(1)`](doc/man1/mpq-info.1) and
-[`mpq-extract(1)`](doc/man1/mpq-extract.1).
+[`mpq-info(1)`](docs/man1/mpq-info.1) and
+[`mpq-extract(1)`](docs/man1/mpq-extract.1).
 
 ## Reporting bugs
 

@@ -1,7 +1,7 @@
 # Subdirectories that are built and installed.
 SUBDIRS = \
 	src \
-	doc/man1
+	docs/man1
 
 # Project documentation included in the source distribution.
 EXTRA_DIST = \

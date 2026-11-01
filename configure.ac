@@ -22,7 +22,7 @@ PKG_CHECK_MODULES([LIBMPQ], [libmpq >= 0.5.0 libmpq < 0.7.0])
 AC_CONFIG_FILES([
 	Makefile
 	src/Makefile
-	doc/man1/Makefile
+	docs/man1/Makefile
 ])
 
 # Complete the configuration process.
