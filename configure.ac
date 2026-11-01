@@ -1,5 +1,5 @@
 # Initialize the Autoconf package metadata.
-AC_INIT([mpq-tools], [0.4.2], [mbroemme@libmpq.org], [mpq-tools])
+AC_INIT([mpq-tools], [0.5.0], [mbroemme@libmpq.org], [mpq-tools])
 
 # Detect the canonical build and host environments.
 AC_CANONICAL_HOST
