@@ -327,8 +327,9 @@ main(int argc, char **argv)
 
     /* get program name. */
     program_name = argv[0];
-    if (program_name && strrchr(program_name, '/')) {
-        program_name = strrchr(program_name, '/') + 1;
+    char *slash = program_name ? (strrchr)(program_name, '/') : NULL;
+    if (slash) {
+        program_name = slash + 1;
     }
 
     /* if no command line option was given, show some info. */

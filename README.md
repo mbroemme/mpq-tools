@@ -83,7 +83,7 @@ export LD_LIBRARY_PATH="$libmpq_prefix/lib${LD_LIBRARY_PATH:+:$LD_LIBRARY_PATH}"
 From the mpq-tools source directory:
 
 ```sh
-sh -e autogen.sh
+sh autogen.sh
 ./configure --prefix="$HOME/.local"
 make
 make install

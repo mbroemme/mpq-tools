@@ -111,7 +111,7 @@ jobs:
       - name: Generate build system
         run: |
           set -euxo pipefail
-          sh -e autogen.sh
+          sh autogen.sh
 
       - name: Configure for clang-tidy
         run: |

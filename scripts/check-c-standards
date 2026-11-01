@@ -46,7 +46,7 @@ trap cleanup EXIT
 cp -a "${project_root}" "${temp_root}/tree"
 cd "${temp_root}/tree"
 
-sh -e autogen.sh >/dev/null
+sh autogen.sh >/dev/null
 
 for compiler in "${compilers[@]}"; do
 	if ! command -v "${compiler}" >/dev/null 2>&1; then
