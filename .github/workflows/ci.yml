@@ -62,6 +62,7 @@ jobs:
             ca-certificates \
             git \
             libbz2-dev \
+            liblzma-dev \
             libtool \
             pkg-config \
             ripgrep \
@@ -82,7 +83,7 @@ jobs:
         uses: actions/checkout@v7
         with:
           repository: mbroemme/libmpq
-          ref: 911c5b6fbc863631ea65328ed2cecb1173f782a1 # v0.5.0
+          ref: 6c9e8e0ad35fe6ea8df3d873471ffe0be00f673e # 0.9.0 development revision
           path: .lint-libmpq
           persist-credentials: false
 
@@ -93,10 +94,8 @@ jobs:
           prefix="$(mktemp -d)"
           sh -e autogen.sh
           ./configure --prefix="${prefix}"
-          make -j"$(nproc)" -C src
-          make -C src install
-          make -C include/libmpq install
-          make install-pkgconfigDATA
+          make -j"$(nproc)"
+          make install
           printf 'PKG_CONFIG_PATH=%s/lib/pkgconfig\n' "${prefix}" >> "${GITHUB_ENV}"
 
       - name: Run source checks

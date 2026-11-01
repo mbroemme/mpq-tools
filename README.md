@@ -35,9 +35,10 @@ On Linux, use a C compiler, GNU make, pkg-config, and a compatible
 [libmpq](https://github.com/mbroemme/libmpq) development installation. A Git
 checkout also requires GNU Autoconf and Automake.
 
-Use a libmpq development package from version 0.5.0 through 0.6.1. The build
-uses pkg-config to find it. libmpq 0.7.0 removed the file flag queries used
-by `mpq-extract`.
+Use libmpq 0.9.0 or later. The build uses pkg-config to find the development
+installation. Until the official 0.9.0 release is available, CI uses libmpq
+development commit `6c9e8e0ad35fe6ea8df3d873471ffe0be00f673e`. The pin will
+switch to the official release during release qualification.
 
 ## Building and installation
 

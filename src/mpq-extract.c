@@ -117,9 +117,7 @@ mpq_extract__list(
     off_t size_packed = 0;
     off_t size_unpacked = 0;
     uint32_t total_files = 0;
-    unsigned int encrypted = 0;
-    unsigned int compressed = 0;
-    unsigned int imploded = 0;
+    uint32_t flags;
     uint32_t i;
     char filename[GENERATED_FILENAME_SIZE];
     mpq_archive_s *mpq_archive;
@@ -152,9 +150,11 @@ mpq_extract__list(
         /* fetch information. */
         libmpq__file_size_packed(mpq_archive, file_number, &size_packed);
         libmpq__file_size_unpacked(mpq_archive, file_number, &size_unpacked);
-        libmpq__file_encrypted(mpq_archive, file_number, &encrypted);
-        libmpq__file_compressed(mpq_archive, file_number, &compressed);
-        libmpq__file_imploded(mpq_archive, file_number, &imploded);
+        result = libmpq__file_flags(mpq_archive, file_number, &flags);
+        if (result < 0) {
+            libmpq__archive_close(mpq_archive);
+            return result;
+        }
         result = mpq_extract__file_name(file_number, filename, sizeof(filename));
         if (result < 0) {
             libmpq__archive_close(mpq_archive);
@@ -169,9 +169,17 @@ mpq_extract__list(
             "file compression ratio:		%.2f%%\n",
             (100 - fabs(((float)size_packed / (float)size_unpacked * 100)))
         );
-        NOTICE("file compressed:		%s\n", compressed ? "yes" : "no");
-        NOTICE("file imploded:			%s\n", imploded ? "yes" : "no");
-        NOTICE("file encrypted:			%s\n", encrypted ? "yes" : "no");
+        NOTICE(
+            "file compressed:		%s\n", (flags & LIBMPQ_FILE_FLAG_COMPRESS) ? "yes" : "no"
+        );
+        NOTICE(
+            "file imploded:			%s\n",
+            (flags & LIBMPQ_FILE_FLAG_IMPLODE) ? "yes" : "no"
+        );
+        NOTICE(
+            "file encrypted:			%s\n",
+            (flags & LIBMPQ_FILE_FLAG_ENCRYPTED) ? "yes" : "no"
+        );
         NOTICE("file name:			%s\n", filename);
     } else {
 
@@ -185,16 +193,15 @@ mpq_extract__list(
             /* cleanup variables. */
             size_packed = 0;
             size_unpacked = 0;
-            encrypted = 0;
-            compressed = 0;
-            imploded = 0;
 
             /* fetch sizes. */
             libmpq__file_size_packed(mpq_archive, i, &size_packed);
             libmpq__file_size_unpacked(mpq_archive, i, &size_unpacked);
-            libmpq__file_encrypted(mpq_archive, i, &encrypted);
-            libmpq__file_compressed(mpq_archive, i, &compressed);
-            libmpq__file_imploded(mpq_archive, i, &imploded);
+            result = libmpq__file_flags(mpq_archive, i, &flags);
+            if (result < 0) {
+                libmpq__archive_close(mpq_archive);
+                return result;
+            }
             result = mpq_extract__file_name(i, filename, sizeof(filename));
             if (result < 0) {
                 libmpq__archive_close(mpq_archive);
@@ -206,8 +213,9 @@ mpq_extract__list(
                 "  %4i   %10" OFFTSTR "   %9" OFFTSTR " %6.0f%%   %3s   %3s   %3s   %s\n", i,
                 size_packed, size_unpacked,
                 (100 - fabs(((float)size_packed / (float)size_unpacked * 100))),
-                compressed ? "yes" : "no", imploded ? "yes" : "no", encrypted ? "yes" : "no",
-                filename
+                (flags & LIBMPQ_FILE_FLAG_COMPRESS) ? "yes" : "no",
+                (flags & LIBMPQ_FILE_FLAG_IMPLODE) ? "yes" : "no",
+                (flags & LIBMPQ_FILE_FLAG_ENCRYPTED) ? "yes" : "no", filename
             );
         }
 
