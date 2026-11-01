@@ -1,0 +1,45 @@
+#!/usr/bin/env bash
+
+# Copyright (c) 2026-2026 Maik Broemme <mbroemme@libmpq.org>
+#
+# This file is free software; you can redistribute it and/or modify
+# it under the terms of the GNU Lesser General Public License as published by
+# the Free Software Foundation; either version 2.1 of the License, or
+# (at your option) any later version.
+#
+# This file is distributed in the hope that it will be useful,
+# but WITHOUT ANY WARRANTY; without even the implied warranty of
+# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+# GNU Lesser General Public License for more details.
+#
+# You should have received a copy of the GNU Lesser General Public License
+# along with this file; if not, see <https://www.gnu.org/licenses/>.
+
+set -euo pipefail
+
+readonly project_root="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/.." && pwd)"
+cd "${project_root}"
+
+status=0
+
+search_c_sources()
+{
+	local grep_status
+	if git grep -nE -e "$1" -- 'src/*.c' 'src/*.h'; then
+		printf '%s\n' "$2" >&2
+		status=1
+	else
+		grep_status=$?
+		if ((grep_status != 1)); then
+			exit "${grep_status}"
+		fi
+	fi
+}
+
+printf 'Checking C identifier casing...\n'
+search_c_sources '\b[a-z][a-z0-9_]*[A-Z][A-Za-z0-9_]*\b' 'Camel-case C identifiers found.'
+
+printf 'Checking opaque generated identifier suffixes...\n'
+search_c_sources '\b[A-Za-z_][A-Za-z0-9_]*_[0-9A-Fa-f]{6,}\b' 'Opaque hexadecimal C identifiers found.'
+
+exit "${status}"

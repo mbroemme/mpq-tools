@@ -1,0 +1,156 @@
+# Copyright (c) 2026 Maik Broemme <mbroemme@libmpq.org>
+#
+# This file is free software; you can redistribute it and/or modify
+# it under the terms of the GNU Lesser General Public License as published by
+# the Free Software Foundation; either version 2.1 of the License, or
+# (at your option) any later version.
+#
+# This file is distributed in the hope that it will be useful,
+# but WITHOUT ANY WARRANTY; without even the implied warranty of
+# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+# GNU Lesser General Public License for more details.
+#
+# You should have received a copy of the GNU Lesser General Public License
+# along with this file; if not, see <https://www.gnu.org/licenses/>.
+
+name: CI
+
+on:
+  push:
+    branches:
+      - '**'
+  pull_request:
+    branches:
+      - '**'
+  merge_group:
+
+permissions:
+  contents: read
+
+jobs:
+  lint:
+    name: Lint and static analysis
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    container:
+      image: debian:trixie-slim
+    defaults:
+      run:
+        shell: bash
+
+    steps:
+      - name: Install lint dependencies
+        run: |
+          set -euxo pipefail
+          apt-get update
+          apt-get install -y --no-install-recommends ca-certificates wget
+          mkdir -p /etc/apt/keyrings
+          wget -qO /etc/apt/keyrings/apt.llvm.org.asc https://apt.llvm.org/llvm-snapshot.gpg.key
+          chmod 0644 /etc/apt/keyrings/apt.llvm.org.asc
+          echo 'deb [signed-by=/etc/apt/keyrings/apt.llvm.org.asc] http://apt.llvm.org/trixie/ llvm-toolchain-trixie-22 main' > /etc/apt/sources.list.d/llvm.list
+          apt-get update
+          apt-get install -y --no-install-recommends \
+            autoconf \
+            automake \
+            bear \
+            build-essential \
+            clang-22 \
+            clang-format-22 \
+            clang-tidy-22 \
+            gcc-14 \
+            git \
+            libbz2-dev \
+            libtool \
+            pkg-config \
+            python3 \
+            shellcheck \
+            zlib1g-dev
+
+      - name: Check out mpq-tools
+        uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+
+      - name: Trust repository checkout
+        id: trust
+        run: git config --global --add safe.directory "${GITHUB_WORKSPACE}"
+
+      - name: Check out the libmpq revision used by the existing sources
+        uses: actions/checkout@v7
+        with:
+          repository: mbroemme/libmpq
+          ref: 60c1e1a35dfca47b03768b00248166eb4849647f
+          path: .lint-libmpq
+          persist-credentials: false
+
+      - name: Install historical libmpq
+        id: libmpq
+        working-directory: .lint-libmpq
+        run: |
+          set -euxo pipefail
+          prefix="$(mktemp -d)"
+          sh -e autogen.sh
+          # On the 64-bit runner, off_t is already 64 bits. The legacy large-file
+          # probe would export an empty _FILE_OFFSET_BITS with modern Autoconf.
+          ./configure --prefix="${prefix}" --disable-static --disable-largefile CC=cc
+          make -j"$(nproc)" -C libmpq
+          make -C libmpq install
+          install -Dm644 libmpq.pc "${prefix}/lib/pkgconfig/libmpq.pc"
+          printf 'PKG_CONFIG_PATH=%s/lib/pkgconfig\n' "${prefix}" >> "${GITHUB_ENV}"
+
+      - name: Run source checks
+        if: ${{ !cancelled() && steps.trust.outcome == 'success' }}
+        env:
+          CLANG_FORMAT: clang-format-22
+        run: scripts/check
+
+      - name: Run C standard compatibility checks
+        if: ${{ !cancelled() && steps.libmpq.outcome == 'success' }}
+        env:
+          GCC: gcc-14
+          CLANG: clang-22
+        run: scripts/check-c-standards
+
+      - name: Generate build system
+        id: bootstrap
+        if: ${{ !cancelled() && steps.libmpq.outcome == 'success' }}
+        run: sh -e autogen.sh
+
+      - name: Configure for clang-tidy
+        id: configure
+        if: ${{ !cancelled() && steps.bootstrap.outcome == 'success' }}
+        run: ./configure --prefix=/usr CC=clang-22
+
+      - name: Build compilation database
+        id: compdb
+        if: ${{ !cancelled() && steps.configure.outcome == 'success' }}
+        run: bear -- make -j"$(nproc)" V=1
+
+      - name: Run clang-tidy
+        if: ${{ !cancelled() && steps.compdb.outcome == 'success' }}
+        run: |
+          set -euo pipefail
+          source_list="$(git ls-files -- 'src/*.c')"
+          if [[ -z "${source_list}" ]]; then
+            echo 'No C translation units found.' >&2
+            exit 1
+          fi
+          mapfile -t sources <<< "${source_list}"
+          # Require captured commands instead of allowing clang-tidy to infer flags.
+          python3 - "${sources[@]}" <<'PYTHON'
+          import json
+          import sys
+          from pathlib import Path
+
+          entries = json.loads(Path("compile_commands.json").read_text())
+          recorded = {
+              (Path(entry["directory"]) / entry["file"]).resolve()
+              for entry in entries
+              if entry.get("arguments") or entry.get("command")
+          }
+          missing = [source for source in sys.argv[1:] if Path(source).resolve() not in recorded]
+          if missing:
+              sys.exit("Missing compilation commands for: " + ", ".join(missing))
+          print("Verified compilation commands for: " + ", ".join(sys.argv[1:]), flush=True)
+          PYTHON
+          clang-tidy-22 --quiet -p . "${sources[@]}"

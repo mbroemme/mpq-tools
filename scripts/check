@@ -1,0 +1,102 @@
+#!/usr/bin/env bash
+
+# Copyright (c) 2026-2026 Maik Broemme <mbroemme@libmpq.org>
+#
+# This file is free software; you can redistribute it and/or modify
+# it under the terms of the GNU Lesser General Public License as published by
+# the Free Software Foundation; either version 2.1 of the License, or
+# (at your option) any later version.
+#
+# This file is distributed in the hope that it will be useful,
+# but WITHOUT ANY WARRANTY; without even the implied warranty of
+# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+# GNU Lesser General Public License for more details.
+#
+# You should have received a copy of the GNU Lesser General Public License
+# along with this file; if not, see <https://www.gnu.org/licenses/>.
+
+set -euo pipefail
+
+readonly project_root="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/.." && pwd)"
+cd "${project_root}"
+
+clang_format="${CLANG_FORMAT:-}"
+if [[ -z "${clang_format}" ]]; then
+	for candidate in clang-format-22 clang-format; do
+		if command -v "${candidate}" >/dev/null 2>&1; then
+			clang_format="${candidate}"
+			break
+		fi
+	done
+fi
+
+if [[ -z "${clang_format}" ]] || ! command -v "${clang_format}" >/dev/null 2>&1; then
+	printf 'No clang-format found. Set CLANG_FORMAT to its executable name or path.\n' >&2
+	exit 1
+fi
+
+for command in git shellcheck; do
+	if ! command -v "${command}" >/dev/null 2>&1; then
+		printf 'Required command not found: %s\n' "${command}" >&2
+		exit 1
+	fi
+done
+
+check_shell_scripts()
+(
+	export LC_ALL=C
+	local bash_shebang='^#![[:blank:]]*(/[^[:blank:]]*)?/(bash|env[[:blank:]]+(-S[[:blank:]]+)?bash)([[:blank:]]|$)'
+	local script shebang
+	local -a shell_scripts=()
+
+	sh -n autogen.sh
+	for script in scripts/*; do
+		[[ -f "${script}" && ! -L "${script}" ]] || continue
+		if [[ ! -r "${script}" ]]; then
+			printf 'Cannot read shell script candidate: %s\n' "${script}" >&2
+			exit 1
+		fi
+		IFS= read -r shebang < "${script}" || [[ -n "${shebang}" ]] || continue
+		if [[ "${shebang}" =~ ${bash_shebang} ]]; then
+			bash -n -- "${script}"
+			shell_scripts+=("${script}")
+		fi
+	done
+	shellcheck -S error autogen.sh "${shell_scripts[@]}"
+)
+
+printf 'Checking shell scripts...\n'
+check_shell_scripts
+
+printf 'Checking tracked text whitespace...\n'
+if git grep -nI '[[:blank:]]$' -- .; then
+	printf 'Trailing whitespace found.\n' >&2
+	exit 1
+else
+	grep_status=$?
+	if ((grep_status != 1)); then
+		exit "${grep_status}"
+	fi
+fi
+
+printf 'Checking native filename namespace...\n'
+source_list="$(git ls-files -- 'src/*.c' 'src/*.h')"
+if [[ -z "${source_list}" ]]; then
+	printf 'No C sources found.\n' >&2
+	exit 1
+fi
+mapfile -t sources <<< "${source_list}"
+for source in "${sources[@]}"; do
+	if [[ "${source##*/}" != mpq-* ]]; then
+		printf 'Native source/header is not namespaced: %s\n' "${source}" >&2
+		exit 1
+	fi
+done
+
+printf 'Checking C formatting...\n'
+scripts/check-comment-spacing "${sources[@]}"
+scripts/check-function-spacing "${sources[@]}"
+scripts/check-c-identifiers
+"${clang_format}" --dry-run --Werror "${sources[@]}"
+
+printf 'All source checks passed.\n'

@@ -1,0 +1,109 @@
+#!/usr/bin/env bash
+
+# Copyright (c) 2026-2026 Maik Broemme <mbroemme@libmpq.org>
+#
+# This file is free software; you can redistribute it and/or modify
+# it under the terms of the GNU Lesser General Public License as published by
+# the Free Software Foundation; either version 2.1 of the License, or
+# (at your option) any later version.
+#
+# This file is distributed in the hope that it will be useful,
+# but WITHOUT ANY WARRANTY; without even the implied warranty of
+# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+# GNU Lesser General Public License for more details.
+#
+# You should have received a copy of the GNU Lesser General Public License
+# along with this file; if not, see <https://www.gnu.org/licenses/>.
+
+set -euo pipefail
+
+compilers=(gcc clang)
+standards=(c99 c11 c17 c23 gnu23)
+if (($# != 0 && $# != 2)); then
+	printf 'Usage: %s [gcc|clang c99|c11|c17|c23|gnu23]\n' "${0##*/}" >&2
+	exit 2
+fi
+if (($# == 2)); then
+	case "$1" in
+		gcc|clang) compilers=("$1") ;;
+		*) printf 'Unsupported compiler: %s\n' "$1" >&2; exit 2 ;;
+	esac
+	case "$2" in
+		c99|c11|c17|c23|gnu23) standards=("$2") ;;
+		*) printf 'Unsupported C standard: %s\n' "$2" >&2; exit 2 ;;
+	esac
+fi
+
+readonly project_root="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/.." && pwd)"
+readonly temp_root="$(mktemp -d "${TMPDIR:-/tmp}/mpq-tools-c-standards.XXXXXX")"
+
+cleanup()
+{
+	rm -rf "${temp_root}"
+}
+trap cleanup EXIT
+
+mkdir "${temp_root}/tree"
+cd "${project_root}"
+git ls-files -z | tar -cf - --null -T - | tar -xf - -C "${temp_root}/tree"
+(cd "${temp_root}/tree" && sh -e autogen.sh)
+
+status=0
+for compiler in "${compilers[@]}"; do
+	case "${compiler}" in
+		gcc) executable="${GCC:-gcc}" ;;
+		clang) executable="${CLANG:-clang}" ;;
+	esac
+	if ! command -v "${executable}" >/dev/null 2>&1; then
+		printf 'Required compiler not found: %s\n' "${executable}" >&2
+		status=1
+		continue
+	fi
+
+	for standard in "${standards[@]}"; do
+		printf 'Compiling mpq-tools: %s with %s...\n' "${standard}" "${executable}"
+		flags=(-O2 -g "-std=${standard}" -Wall -Wextra -Wpedantic -Werror)
+		case "${standard}" in
+			c99) version='199901L' ;;
+			c11) version='201112L' ;;
+			c17) version='201710L' ;;
+			# GCC 14 accepts C23 as an alias for its C2x implementation.
+			c23|gnu23) version='(202000L|202311L)' ;;
+		esac
+		if ! macros="$("${executable}" "${flags[@]}" -dM -E -x c /dev/null)"; then
+			printf 'Compiler rejected %s mode: %s\n' "${standard}" "${executable}" >&2
+			status=1
+			continue
+		fi
+		if ! awk -v version="${version}" -v standard="${standard}" '
+			$2 == "__STDC_VERSION__" { c_version = $3 }
+			$2 == "__STRICT_ANSI__" { strict = 1 }
+			END {
+				printf "Detected __STDC_VERSION__=%s, __STRICT_ANSI__=%s\n", c_version, (strict ? "1" : "unset")
+				exit !(c_version ~ ("^" version "$") && (standard == "gnu23" ? !strict : strict))
+			}' <<< "${macros}"; then
+			printf 'Compiler did not select %s mode: %s\n' "${standard}" "${executable}" >&2
+			status=1
+			continue
+		fi
+
+		build_dir="${temp_root}/${compiler}-${standard}"
+		mkdir "${build_dir}"
+		cd "${build_dir}"
+		if ! "${temp_root}/tree/configure" CC="${executable}" CFLAGS="${flags[*]}"; then
+			printf 'Configuration failed: %s %s\n' "${compiler}" "${standard}" >&2
+			status=1
+			continue
+		fi
+		# Override configure's CC on the make command line because Autoconf
+		# may append its own -std option. Use the same flags as the mode probe.
+		if ! make -k -j"$(nproc)" V=1 CC="${executable}" CFLAGS="${flags[*]}"; then
+			printf 'Build failed: %s %s\n' "${compiler}" "${standard}" >&2
+			status=1
+			continue
+		fi
+		printf 'Build passed: %s %s\n' "${compiler}" "${standard}"
+	done
+done
+
+exit "${status}"
