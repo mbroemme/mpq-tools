@@ -10,7 +10,7 @@ touch $directory/configure.ac
 # Regenerate configuration files
 aclocal
 autoheader
-automake --foreign --add-missing --copy
+automake --add-missing --copy
 autoconf
 
 # Run configure for this platform

@@ -82,7 +82,7 @@ mpq_extract__version(char *program_name)
 
     /* show the version. */
     NOTICE("%s (mopaq) %s (libmpq %s)\n", program_name, VERSION, libmpq__version());
-    NOTICE("Written by %s\n", AUTHOR);
+    NOTICE("Written by Maik Broemme <mbroemme@libmpq.org>\n");
     NOTICE("\n");
     NOTICE("This is free software; see the source for copying conditions.  There is NO\n");
     NOTICE("warranty; not even for MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.\n");
