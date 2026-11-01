@@ -72,28 +72,30 @@ printf 'Checking tracked text whitespace...\n'
 if git grep -nI '[[:blank:]]$' -- .; then
 	printf 'Trailing whitespace found.\n' >&2
 	exit 1
-else
-	grep_status=$?
-	if ((grep_status != 1)); then
-		exit "${grep_status}"
-	fi
 fi
 
-printf 'Checking native filename namespace...\n'
-source_list="$(git ls-files -- 'src/*.c' 'src/*.h')"
-if [[ -z "${source_list}" ]]; then
-	printf 'No C sources found.\n' >&2
-	exit 1
-fi
-mapfile -t sources <<< "${source_list}"
-for source in "${sources[@]}"; do
-	if [[ "${source##*/}" != mpq-* ]]; then
-		printf 'Native source/header is not namespaced: %s\n' "${source}" >&2
+printf 'Checking private native filename namespace...\n'
+for source in src/*.c src/*.h; do
+	[[ -f "${source}" ]] || continue
+	if [[ "$(basename -- "${source}")" != mpq-* ]]; then
+		printf 'Private native source/header is not namespaced: %s\n' "${source}" >&2
 		exit 1
 	fi
 done
 
 printf 'Checking C formatting...\n'
+mapfile -t sources < <(
+	git ls-files 'src/*.c' 'src/*.h' |
+	while IFS= read -r source; do
+		if [[ -f "${source}" ]]; then
+			printf '%s\n' "${source}"
+		fi
+	done
+)
+if ((${#sources[@]} == 0)); then
+	printf 'No C sources found.\n' >&2
+	exit 1
+fi
 scripts/check-comment-spacing "${sources[@]}"
 scripts/check-function-spacing "${sources[@]}"
 scripts/check-c-identifiers

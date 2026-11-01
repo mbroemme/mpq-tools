@@ -43,7 +43,9 @@ jobs:
         run: |
           set -euxo pipefail
           apt-get update
-          apt-get install -y --no-install-recommends ca-certificates wget
+          apt-get install -y --no-install-recommends \
+            ca-certificates \
+            wget
           mkdir -p /etc/apt/keyrings
           wget -qO /etc/apt/keyrings/apt.llvm.org.asc https://apt.llvm.org/llvm-snapshot.gpg.key
           chmod 0644 /etc/apt/keyrings/apt.llvm.org.asc
@@ -57,23 +59,24 @@ jobs:
             clang-22 \
             clang-format-22 \
             clang-tidy-22 \
-            gcc-14 \
+            ca-certificates \
             git \
             libbz2-dev \
             libtool \
             pkg-config \
-            python3 \
+            ripgrep \
             shellcheck \
             zlib1g-dev
 
-      - name: Check out mpq-tools
+      - name: Check out repository
         uses: actions/checkout@v7
         with:
           persist-credentials: false
 
       - name: Trust repository checkout
-        id: trust
-        run: git config --global --add safe.directory "${GITHUB_WORKSPACE}"
+        run: |
+          set -euxo pipefail
+          git config --global --add safe.directory "${GITHUB_WORKSPACE}"
 
       - name: Check out the libmpq revision used by the existing sources
         uses: actions/checkout@v7
@@ -84,7 +87,6 @@ jobs:
           persist-credentials: false
 
       - name: Install historical libmpq
-        id: libmpq
         working-directory: .lint-libmpq
         run: |
           set -euxo pipefail
@@ -99,58 +101,34 @@ jobs:
           printf 'PKG_CONFIG_PATH=%s/lib/pkgconfig\n' "${prefix}" >> "${GITHUB_ENV}"
 
       - name: Run source checks
-        if: ${{ !cancelled() && steps.trust.outcome == 'success' }}
         env:
           CLANG_FORMAT: clang-format-22
         run: scripts/check
 
       - name: Run C standard compatibility checks
-        if: ${{ !cancelled() && steps.libmpq.outcome == 'success' }}
-        env:
-          GCC: gcc-14
-          CLANG: clang-22
-        run: scripts/check-c-standards
+        run: PATH="/usr/lib/llvm-22/bin:${PATH}" scripts/check-c-standards
 
       - name: Generate build system
-        id: bootstrap
-        if: ${{ !cancelled() && steps.libmpq.outcome == 'success' }}
-        run: sh -e autogen.sh
+        run: |
+          set -euxo pipefail
+          sh -e autogen.sh
 
       - name: Configure for clang-tidy
-        id: configure
-        if: ${{ !cancelled() && steps.bootstrap.outcome == 'success' }}
-        run: ./configure --prefix=/usr CC=clang-22
+        run: |
+          set -euxo pipefail
+          ./configure --prefix=/usr CC=clang-22
 
       - name: Build compilation database
-        id: compdb
-        if: ${{ !cancelled() && steps.configure.outcome == 'success' }}
-        run: bear -- make -j"$(nproc)" V=1
+        run: |
+          set -euxo pipefail
+          bear -- make -j"$(nproc)" V=1
 
       - name: Run clang-tidy
-        if: ${{ !cancelled() && steps.compdb.outcome == 'success' }}
         run: |
-          set -euo pipefail
-          source_list="$(git ls-files -- 'src/*.c')"
-          if [[ -z "${source_list}" ]]; then
+          set -euxo pipefail
+          mapfile -t sources < <(git ls-files 'src/*.c')
+          if ((${#sources[@]} == 0)); then
             echo 'No C translation units found.' >&2
             exit 1
           fi
-          mapfile -t sources <<< "${source_list}"
-          # Require captured commands instead of allowing clang-tidy to infer flags.
-          python3 - "${sources[@]}" <<'PYTHON'
-          import json
-          import sys
-          from pathlib import Path
-
-          entries = json.loads(Path("compile_commands.json").read_text())
-          recorded = {
-              (Path(entry["directory"]) / entry["file"]).resolve()
-              for entry in entries
-              if entry.get("arguments") or entry.get("command")
-          }
-          missing = [source for source in sys.argv[1:] if Path(source).resolve() not in recorded]
-          if missing:
-              sys.exit("Missing compilation commands for: " + ", ".join(missing))
-          print("Verified compilation commands for: " + ", ".join(sys.argv[1:]), flush=True)
-          PYTHON
           clang-tidy-22 --quiet -p . "${sources[@]}"

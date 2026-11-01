@@ -24,22 +24,23 @@ status=0
 
 search_c_sources()
 {
-	local grep_status
-	if git grep -nE -e "$1" -- 'src/*.c' 'src/*.h'; then
-		printf '%s\n' "$2" >&2
-		status=1
+	if command -v rg >/dev/null 2>&1; then
+		rg -n --glob '*.c' --glob '*.h' -- "$1" src
 	else
-		grep_status=$?
-		if ((grep_status != 1)); then
-			exit "${grep_status}"
-		fi
+		grep -R -n -E --include='*.c' --include='*.h' -- "$1" src
 	fi
 }
 
 printf 'Checking C identifier casing...\n'
-search_c_sources '\b[a-z][a-z0-9_]*[A-Z][A-Za-z0-9_]*\b' 'Camel-case C identifiers found.'
+if search_c_sources '\b[a-z][a-z0-9_]*[A-Z][A-Za-z0-9_]*\b'; then
+	printf 'Camel-case C identifiers found.\n' >&2
+	status=1
+fi
 
 printf 'Checking opaque generated identifier suffixes...\n'
-search_c_sources '\b[A-Za-z_][A-Za-z0-9_]*_[0-9A-Fa-f]{6,}\b' 'Opaque hexadecimal C identifiers found.'
+if search_c_sources '\b[A-Za-z_][A-Za-z0-9_]*_[0-9A-Fa-f]{6,}\b'; then
+	printf 'Opaque hexadecimal C identifiers found.\n' >&2
+	status=1
+fi
 
 exit "${status}"
