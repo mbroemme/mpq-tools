@@ -23,6 +23,10 @@
 /* mpq-tools configuration includes. */
 #include "config.h"
 
+#if defined(_WIN32) && !defined(_CRT_RAND_S)
+#define _CRT_RAND_S
+#endif
+
 /* generic includes. */
 #include <errno.h>
 #include <getopt.h>
@@ -31,6 +35,18 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+
+#ifdef _WIN32
+#include <fcntl.h>
+#include <io.h>
+#include <sys/stat.h>
+#ifndef NOGDI
+#define NOGDI
+#endif
+#include <windows.h>
+#else
+#include <unistd.h>
+#endif
 
 /* libmpq includes. */
 #include <libmpq/mpq.h>
@@ -46,6 +62,14 @@
 
 /* A generated filename holds at most ten decimal digits plus its affixes and NUL. */
 #define GENERATED_FILENAME_SIZE sizeof("file4294967295.xxx")
+
+#define EXTRACT_BUFFER_SIZE (64u * 1024u)
+
+#ifdef _WIN32
+#define TEMP_FILENAME_TEMPLATE ".mpq-extract-00000000000000000000000000000000"
+#else
+#define TEMP_FILENAME_TEMPLATE ".mpq-extract-XXXXXX"
+#endif
 
 /* Local failures use positive statuses, distinct from libmpq errors. */
 enum
@@ -243,9 +267,133 @@ mpq_extract__output_error(const char *filename, const char *operation, int error
     );
 }
 
+static void
+mpq_extract__discard_temp(const char *temp_name)
+{
+#ifdef _WIN32
+    int result = _unlink(temp_name);
+#else
+    int result = unlink(temp_name);
+#endif
+    if (result != 0) {
+        mpq_extract__output_error(temp_name, "remove temporary", errno);
+    }
+}
+
+#ifdef _WIN32
+static int
+mpq_extract__create_temp(char *temp_name)
+{
+    for (unsigned int attempt = 0; attempt < 16; attempt++) {
+        unsigned int random[4];
+        for (size_t i = 0; i < 4; i++) {
+            int result = rand_s(&random[i]);
+            if (result != 0) {
+                errno = result;
+                return -1;
+            }
+        }
+
+        snprintf(
+            temp_name, sizeof(TEMP_FILENAME_TEMPLATE), ".mpq-extract-%08x%08x%08x%08x", random[0],
+            random[1], random[2], random[3]
+        );
+        int fd = _open(temp_name, _O_WRONLY | _O_CREAT | _O_EXCL | _O_BINARY, _S_IREAD | _S_IWRITE);
+        if (fd >= 0 || errno != EEXIST) {
+            return fd;
+        }
+    }
+    return -1;
+}
+#endif
+
+static FILE *
+mpq_extract__open_temp(char *temp_name, const char *filename)
+{
+    errno = 0;
+#ifdef _WIN32
+    int fd = mpq_extract__create_temp(temp_name);
+#else
+    int fd = mkstemp(temp_name);
+#endif
+    if (fd < 0) {
+        mpq_extract__output_error(filename, "create temporary", errno);
+        return NULL;
+    }
+
+    errno = 0;
+#ifdef _WIN32
+    FILE *fp = _fdopen(fd, "wb");
+#else
+    FILE *fp = fdopen(fd, "wb");
+#endif
+    if (fp == NULL) {
+        mpq_extract__output_error(filename, "open temporary", errno);
+#ifdef _WIN32
+        int close_result = _close(fd);
+#else
+        int close_result = close(fd);
+#endif
+        if (close_result != 0) {
+            mpq_extract__output_error(temp_name, "close temporary", errno);
+        }
+        mpq_extract__discard_temp(temp_name);
+    }
+    return fp;
+}
+
+static int32_t
+mpq_extract__publish(const char *temp_name, const char *filename)
+{
+#ifdef _WIN32
+    if (!MoveFileExA(temp_name, filename, MOVEFILE_REPLACE_EXISTING)) {
+        unsigned long error = GetLastError();
+        ERROR("'%s': cannot publish output: Windows error %lu\n", filename, error);
+        return OUTPUT_IO_FAILED;
+    }
+#else
+    errno = 0;
+    if (rename(temp_name, filename) != 0) {
+        mpq_extract__output_error(filename, "publish", errno);
+        return OUTPUT_IO_FAILED;
+    }
+#endif
+    return 0;
+}
+
+static int32_t
+mpq_extract__copy_stream(
+    mpq_stream_s *stream, FILE *fp, const char *filename, uint8_t *buffer, libmpq__off_t size
+)
+{
+    const libmpq__off_t request = EXTRACT_BUFFER_SIZE;
+    libmpq__off_t total = 0;
+    for (;;) {
+        libmpq__off_t transferred = -1;
+        int32_t result = libmpq__stream_read(stream, buffer, request, &transferred);
+        if (result != 0) {
+            return result;
+        }
+        if (transferred < 0 || transferred > request || transferred > size - total) {
+            return LIBMPQ_ERROR_SIZE;
+        }
+        if (transferred == 0) {
+            return total == size ? 0 : LIBMPQ_ERROR_SIZE;
+        }
+
+        size_t bytes = (size_t)transferred;
+        errno = 0;
+        if (fwrite(buffer, 1, bytes, fp) != bytes) {
+            mpq_extract__output_error(filename, "write temporary", errno);
+            return OUTPUT_IO_FAILED;
+        }
+        total += transferred;
+    }
+}
+
 /* Extract one member to its generated filename. */
 static int32_t
-mpq_extract__extract_file(mpq_archive_s *mpq_archive, uint32_t file_number)
+mpq_extract__extract_file(mpq_archive_s *mpq_archive, uint32_t file_number, uint8_t *buffer)
 {
     char filename[GENERATED_FILENAME_SIZE];
     int32_t result = mpq_extract__file_name(file_number, filename, sizeof(filename));
@@ -253,63 +401,49 @@ mpq_extract__extract_file(mpq_archive_s *mpq_archive, uint32_t file_number)
         return result;
     }
 
-    libmpq__off_t out_size;
-    result = libmpq__file_size_unpacked(mpq_archive, file_number, &out_size);
+    mpq_stream_s *stream;
+    result = libmpq__stream_open(mpq_archive, file_number, &stream);
     if (result != 0) {
         return result;
     }
-    if (out_size < 0 || (uintmax_t)out_size > SIZE_MAX) {
-        return LIBMPQ_ERROR_SIZE;
-    }
 
-    size_t capacity = (size_t)out_size;
-    uint8_t *buffer = NULL;
-    if (capacity != 0) {
-        buffer = malloc(capacity);
-        if (buffer == NULL) {
-            return LIBMPQ_ERROR_MALLOC;
+    char temp_name[] = TEMP_FILENAME_TEMPLATE;
+    FILE *fp = NULL;
+    libmpq__off_t size = -1;
+    result = libmpq__stream_size(stream, &size);
+    if (result == 0) {
+        if (size < 0) {
+            result = LIBMPQ_ERROR_SIZE;
+        } else {
+            fp = mpq_extract__open_temp(temp_name, filename);
+            result = fp != NULL ? mpq_extract__copy_stream(stream, fp, filename, buffer, size)
+                                : OUTPUT_OPEN_FAILED;
         }
     }
 
-    /* Supply a valid buffer even when the logical member is empty. */
-    uint8_t empty = 0;
-    uint8_t *out_buf = buffer != NULL ? buffer : &empty;
-    libmpq__off_t transferred = -1;
-    result = libmpq__file_read(mpq_archive, file_number, out_buf, out_size, &transferred);
-    if (result != 0) {
-        goto free_buffer;
+    int32_t stream_close_result = libmpq__stream_close(stream);
+    if (result == 0) {
+        result = stream_close_result;
     }
-    if (transferred != out_size) {
-        result = LIBMPQ_ERROR_SIZE;
-        goto free_buffer;
-    }
-
-    errno = 0;
-    FILE *fp = fopen(filename, "wb");
     if (fp == NULL) {
-        mpq_extract__output_error(filename, "open", errno);
-        result = OUTPUT_OPEN_FAILED;
-        goto free_buffer;
-    }
-
-    NOTICE("extracting %s\n", filename);
-
-    size_t bytes = (size_t)transferred;
-    errno = 0;
-    if (fwrite(out_buf, 1, bytes, fp) != bytes) {
-        mpq_extract__output_error(filename, "write", errno);
-        result = OUTPUT_IO_FAILED;
+        return result;
     }
 
     errno = 0;
     int close_result = fclose(fp);
     if (close_result != 0 && result == 0) {
-        mpq_extract__output_error(filename, "close", errno);
+        mpq_extract__output_error(filename, "close temporary", errno);
         result = OUTPUT_IO_FAILED;
     }
 
-free_buffer:
-    free(buffer);
+    if (result == 0) {
+        result = mpq_extract__publish(temp_name, filename);
+    }
+    if (result == 0) {
+        NOTICE("extracting %s\n", filename);
+    } else {
+        mpq_extract__discard_temp(temp_name);
+    }
     return result;
 }
 
@@ -325,19 +459,25 @@ mpq_extract__extract(const char *mpq_filename, uint32_t file_number)
 
     uint32_t total_files;
     result = libmpq__archive_files(mpq_archive, &total_files);
+    if (result == 0 && file_number != ALL_FILES && file_number >= total_files) {
+        result = MEMBER_OUT_OF_RANGE;
+    }
     if (result == 0) {
-        if (file_number == ALL_FILES) {
+        const size_t capacity = EXTRACT_BUFFER_SIZE;
+        uint8_t *buffer = total_files != 0 ? malloc(capacity) : NULL;
+        if (total_files != 0 && buffer == NULL) {
+            result = LIBMPQ_ERROR_MALLOC;
+        } else if (file_number == ALL_FILES) {
             for (uint32_t i = 0; i < total_files; i++) {
-                result = mpq_extract__extract_file(mpq_archive, i);
+                result = mpq_extract__extract_file(mpq_archive, i, buffer);
                 if (result != 0) {
                     break;
                 }
             }
-        } else if (file_number < total_files) {
-            result = mpq_extract__extract_file(mpq_archive, file_number);
         } else {
-            result = MEMBER_OUT_OF_RANGE;
+            result = mpq_extract__extract_file(mpq_archive, file_number, buffer);
         }
+        free(buffer);
     }
 
     int32_t close_result = libmpq__archive_close(mpq_archive);

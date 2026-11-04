@@ -74,9 +74,10 @@ Both utilities accept `-h` or `--help` and `-v` or `--version`.
 
 Omit the member numbers to list or extract all members. Command-line
 member numbers start at 1, while displayed member indexes and generated
-filenames start at 0. Extraction writes to the current directory and
-overwrites files that match the generated names. Use a fresh output
-directory for each archive.
+filenames start at 0. Extraction writes each member to a temporary file in
+the current directory and publishes it after that member completes. Publication
+replaces any file with the same generated name. Use a fresh output directory
+for each archive.
 
 ### Examples
 
@@ -98,7 +99,9 @@ The last command extracts the first and third members as
 The utilities provide read-only archive operations. The extractor uses
 generated names and requires numeric member selection for individual
 files. Archive and compression support is limited to what the linked
-libmpq can read.
+libmpq can read. Ordinary extraction streams each member in a single pass.
+It uses libmpq's applicable sector checks and does not perform a separate
+whole-member CRC32 or MD5 verification pass.
 
 ## Documentation
 
