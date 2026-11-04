@@ -24,7 +24,7 @@
 #include "config.h"
 
 /* generic includes. */
-#include <fcntl.h>
+#include <errno.h>
 #include <getopt.h>
 #include <inttypes.h>
 #include <math.h>
@@ -41,18 +41,19 @@
 /* define new print functions for notification. */
 #define NOTICE(...) printf(__VA_ARGS__);
 
-/* define size of off_t */
-#if _FILE_OFFSET_BITS == 64
-#define OFFTSTR "lli"
-#else
-#define OFFTSTR "li"
-#endif
-
 /* File numbers are zero-based internally. Omission selects every file. */
 #define ALL_FILES UINT32_MAX
 
 /* A generated filename holds at most ten decimal digits plus its affixes and NUL. */
 #define GENERATED_FILENAME_SIZE sizeof("file4294967295.xxx")
+
+/* Local failures use positive statuses, distinct from libmpq errors. */
+enum
+{
+    MEMBER_OUT_OF_RANGE = 1,
+    OUTPUT_OPEN_FAILED,
+    OUTPUT_IO_FAILED
+};
 
 /* this function show the usage. */
 int
@@ -92,7 +93,7 @@ mpq_extract__version(char *program_name)
 }
 
 /* Generate a name until listfile support is available. */
-static int
+static int32_t
 mpq_extract__file_name(uint32_t file_number, char *filename, size_t filename_size)
 {
     int result = snprintf(filename, filename_size, "file%06" PRIu32 ".xxx", file_number);
@@ -106,31 +107,35 @@ mpq_extract__file_name(uint32_t file_number, char *filename, size_t filename_siz
 }
 
 /* this function will list the archive content. */
-int
+static int32_t
 mpq_extract__list(
     const char *mpq_filename, uint32_t file_number, unsigned int number, unsigned int files
 )
 {
 
     /* some common variables. */
-    int result = 0;
-    off_t size_packed = 0;
-    off_t size_unpacked = 0;
-    uint32_t total_files = 0;
+    int32_t result;
+    int32_t close_result;
+    libmpq__off_t size_packed;
+    libmpq__off_t size_unpacked;
+    uint32_t total_files;
     uint32_t flags;
     uint32_t i;
     char filename[GENERATED_FILENAME_SIZE];
     mpq_archive_s *mpq_archive;
 
     /* open the mpq-archive. */
-    if ((result = libmpq__archive_open(&mpq_archive, mpq_filename, -1)) < 0) {
+    if ((result = libmpq__archive_open(&mpq_archive, mpq_filename, -1)) != 0) {
 
         /* something on open file failed. */
         return result;
     }
 
     /* fetch number of files. */
-    libmpq__archive_files(mpq_archive, &total_files);
+    result = libmpq__archive_files(mpq_archive, &total_files);
+    if (result != 0) {
+        goto close_archive;
+    }
 
     /* check if we should process all files. */
     if (file_number != ALL_FILES) {
@@ -143,28 +148,24 @@ mpq_extract__list(
         }
 
         if (file_number >= total_files) {
-            libmpq__archive_close(mpq_archive);
-            return LIBMPQ_ERROR_EXIST;
+            result = MEMBER_OUT_OF_RANGE;
+            goto close_archive;
         }
 
         /* fetch information. */
-        libmpq__file_size_packed(mpq_archive, file_number, &size_packed);
-        libmpq__file_size_unpacked(mpq_archive, file_number, &size_unpacked);
-        result = libmpq__file_flags(mpq_archive, file_number, &flags);
-        if (result < 0) {
-            libmpq__archive_close(mpq_archive);
-            return result;
-        }
-        result = mpq_extract__file_name(file_number, filename, sizeof(filename));
-        if (result < 0) {
-            libmpq__archive_close(mpq_archive);
-            return result;
+        if ((result = libmpq__file_size_packed(mpq_archive, file_number, &size_packed)) != 0 ||
+            (result = libmpq__file_size_unpacked(mpq_archive, file_number, &size_unpacked)) != 0 ||
+            (result = libmpq__file_flags(mpq_archive, file_number, &flags)) != 0 ||
+            (result = mpq_extract__file_name(file_number, filename, sizeof(filename))) != 0) {
+            goto close_archive;
         }
 
         /* show the file information. */
-        NOTICE("file number:			%i/%i\n", file_number, total_files);
-        NOTICE("file packed size:		%" OFFTSTR "\n", size_packed);
-        NOTICE("file unpacked size:		%" OFFTSTR "\n", size_unpacked);
+        NOTICE(
+            "file number:			%" PRIu32 "/%" PRIu32 "\n", file_number, total_files
+        );
+        NOTICE("file packed size:		%" PRId64 "\n", size_packed);
+        NOTICE("file unpacked size:		%" PRId64 "\n", size_unpacked);
         NOTICE(
             "file compression ratio:		%.2f%%\n",
             (100 - fabs(((float)size_packed / (float)size_unpacked * 100)))
@@ -190,27 +191,17 @@ mpq_extract__list(
         /* loop through all files. */
         for (i = 0; i < total_files; i++) {
 
-            /* cleanup variables. */
-            size_packed = 0;
-            size_unpacked = 0;
-
             /* fetch sizes. */
-            libmpq__file_size_packed(mpq_archive, i, &size_packed);
-            libmpq__file_size_unpacked(mpq_archive, i, &size_unpacked);
-            result = libmpq__file_flags(mpq_archive, i, &flags);
-            if (result < 0) {
-                libmpq__archive_close(mpq_archive);
-                return result;
-            }
-            result = mpq_extract__file_name(i, filename, sizeof(filename));
-            if (result < 0) {
-                libmpq__archive_close(mpq_archive);
-                return result;
+            if ((result = libmpq__file_size_packed(mpq_archive, i, &size_packed)) != 0 ||
+                (result = libmpq__file_size_unpacked(mpq_archive, i, &size_unpacked)) != 0 ||
+                (result = libmpq__file_flags(mpq_archive, i, &flags)) != 0 ||
+                (result = mpq_extract__file_name(i, filename, sizeof(filename))) != 0) {
+                goto close_archive;
             }
 
             /* show file information. */
             NOTICE(
-                "  %4i   %10" OFFTSTR "   %9" OFFTSTR " %6.0f%%   %3s   %3s   %3s   %s\n", i,
+                "  %4" PRIu32 "   %10" PRId64 "   %9" PRId64 " %6.0f%%   %3s   %3s   %3s   %s\n", i,
                 size_packed, size_unpacked,
                 (100 - fabs(((float)size_packed / (float)size_unpacked * 100))),
                 (flags & LIBMPQ_FILE_FLAG_COMPRESS) ? "yes" : "no",
@@ -219,95 +210,138 @@ mpq_extract__list(
             );
         }
 
-        /* cleanup variables. */
+        /* The archive size queries add to these totals. */
         size_packed = 0;
         size_unpacked = 0;
 
         /* fetch sizes. */
-        libmpq__archive_size_packed(mpq_archive, &size_packed);
-        libmpq__archive_size_unpacked(mpq_archive, &size_unpacked);
+        if ((result = libmpq__archive_size_packed(mpq_archive, &size_packed)) != 0 ||
+            (result = libmpq__archive_size_unpacked(mpq_archive, &size_unpacked)) != 0) {
+            goto close_archive;
+        }
 
         /* show footer. */
         NOTICE("------   ----------   ---------   -----   ---   ---   ---   --------\n");
         NOTICE(
-            "  %4i   %10" OFFTSTR "   %9" OFFTSTR " %6.0f%%   %s\n", total_files, size_packed,
-            size_unpacked, (100 - fabs(((float)size_packed / (float)size_unpacked * 100))),
-            mpq_filename
+            "  %4" PRIu32 "   %10" PRId64 "   %9" PRId64 " %6.0f%%   %s\n", total_files,
+            size_packed, size_unpacked,
+            (100 - fabs(((float)size_packed / (float)size_unpacked * 100))), mpq_filename
         );
     }
 
-    /* always close file descriptor, file could be opened also if it is no valid mpq archive. */
-    libmpq__archive_close(mpq_archive);
+close_archive:
+    close_result = libmpq__archive_close(mpq_archive);
+    return result != 0 ? result : close_result;
+}
 
-    /* if no error was found, return zero. */
-    return 0;
+static void
+mpq_extract__output_error(const char *filename, const char *operation, int error)
+{
+    ERROR(
+        "'%s': cannot %s output: %s\n", filename, operation,
+        error != 0 ? strerror(error) : "I/O error"
+    );
 }
 
 /* Extract one member to its generated filename. */
-static int
+static int32_t
 mpq_extract__extract_file(mpq_archive_s *mpq_archive, uint32_t file_number)
 {
     char filename[GENERATED_FILENAME_SIZE];
-    int result = mpq_extract__file_name(file_number, filename, sizeof(filename));
-    if (result < 0) {
+    int32_t result = mpq_extract__file_name(file_number, filename, sizeof(filename));
+    if (result != 0) {
         return result;
     }
 
+    libmpq__off_t out_size;
+    result = libmpq__file_size_unpacked(mpq_archive, file_number, &out_size);
+    if (result != 0) {
+        return result;
+    }
+    if (out_size < 0 || (uintmax_t)out_size > SIZE_MAX) {
+        return LIBMPQ_ERROR_SIZE;
+    }
+
+    size_t capacity = (size_t)out_size;
+    uint8_t *buffer = NULL;
+    if (capacity != 0) {
+        buffer = malloc(capacity);
+        if (buffer == NULL) {
+            return LIBMPQ_ERROR_MALLOC;
+        }
+    }
+
+    /* Supply a valid buffer even when the logical member is empty. */
+    uint8_t empty = 0;
+    uint8_t *out_buf = buffer != NULL ? buffer : &empty;
+    libmpq__off_t transferred = -1;
+    result = libmpq__file_read(mpq_archive, file_number, out_buf, out_size, &transferred);
+    if (result != 0) {
+        goto free_buffer;
+    }
+    if (transferred != out_size) {
+        result = LIBMPQ_ERROR_SIZE;
+        goto free_buffer;
+    }
+
+    errno = 0;
     FILE *fp = fopen(filename, "wb");
     if (fp == NULL) {
-        return LIBMPQ_ERROR_OPEN;
+        mpq_extract__output_error(filename, "open", errno);
+        result = OUTPUT_OPEN_FAILED;
+        goto free_buffer;
     }
 
     NOTICE("extracting %s\n", filename);
 
-    off_t transferred = 0;
-    off_t out_size = 0;
-    libmpq__file_size_unpacked(mpq_archive, file_number, &out_size);
-
-    unsigned char *out_buf = malloc(out_size);
-    if (out_buf == NULL) {
-        result = LIBMPQ_ERROR_MALLOC;
-    } else {
-        result = libmpq__file_read(mpq_archive, file_number, out_buf, out_size, &transferred);
-        if (result >= 0) {
-            fwrite(out_buf, 1, out_size, fp);
-        }
-        free(out_buf);
+    size_t bytes = (size_t)transferred;
+    errno = 0;
+    if (fwrite(out_buf, 1, bytes, fp) != bytes) {
+        mpq_extract__output_error(filename, "write", errno);
+        result = OUTPUT_IO_FAILED;
     }
 
-    if (fclose(fp) < 0) {
-        return LIBMPQ_ERROR_CLOSE;
+    errno = 0;
+    int close_result = fclose(fp);
+    if (close_result != 0 && result == 0) {
+        mpq_extract__output_error(filename, "close", errno);
+        result = OUTPUT_IO_FAILED;
     }
+
+free_buffer:
+    free(buffer);
     return result;
 }
 
 /* Extract one member or all members in archive order. */
-int
+static int32_t
 mpq_extract__extract(const char *mpq_filename, uint32_t file_number)
 {
     mpq_archive_s *mpq_archive;
-    int result = libmpq__archive_open(&mpq_archive, mpq_filename, -1);
-    if (result < 0) {
+    int32_t result = libmpq__archive_open(&mpq_archive, mpq_filename, -1);
+    if (result != 0) {
         return result;
     }
 
-    uint32_t total_files = 0;
-    libmpq__archive_files(mpq_archive, &total_files);
-    if (file_number == ALL_FILES) {
-        for (uint32_t i = 0; i < total_files; i++) {
-            result = mpq_extract__extract_file(mpq_archive, i);
-            if (result < 0) {
-                break;
+    uint32_t total_files;
+    result = libmpq__archive_files(mpq_archive, &total_files);
+    if (result == 0) {
+        if (file_number == ALL_FILES) {
+            for (uint32_t i = 0; i < total_files; i++) {
+                result = mpq_extract__extract_file(mpq_archive, i);
+                if (result != 0) {
+                    break;
+                }
             }
+        } else if (file_number < total_files) {
+            result = mpq_extract__extract_file(mpq_archive, file_number);
+        } else {
+            result = MEMBER_OUT_OF_RANGE;
         }
-    } else if (file_number < total_files) {
-        result = mpq_extract__extract_file(mpq_archive, file_number);
-    } else {
-        result = LIBMPQ_ERROR_EXIST;
     }
 
-    libmpq__archive_close(mpq_archive);
-    return result;
+    int32_t close_result = libmpq__archive_close(mpq_archive);
+    return result != 0 ? result : close_result;
 }
 
 /* the main function starts here. */
@@ -316,7 +350,7 @@ main(int argc, char **argv)
 {
 
     /* common variables for the command line. */
-    int result;
+    int32_t result;
     int opt;
     int option_index = 0;
     static char const short_options[] = "hvelf:";
@@ -441,27 +475,22 @@ main(int argc, char **argv)
             result = mpq_extract__extract(mpq_filename, file_number);
         }
 
-        /* check if archive was correctly opened. */
-        if (result == LIBMPQ_ERROR_OPEN) {
-
-            /* open archive failed. */
-            ERROR("%s: '%s' no such file or directory\n", program_name, mpq_filename);
-
-            /* if archive did not exist, we can stop everything. :) */
-            exit(1);
-        }
-
-        /* check if file in archive exist. */
-        if (result == LIBMPQ_ERROR_EXIST) {
-
-            /* file was not found in archive. */
+        if (result == MEMBER_OUT_OF_RANGE) {
             ERROR(
                 "%s: '%s' no such file or directory in archive '%s'\n", program_name, argv[optind],
                 mpq_filename
             );
 
-            /* if file did not exist, we continue to next file. */
-            continue;
+        } else if (result < 0) {
+            const char *message = libmpq__strerror(result);
+            ERROR(
+                "%s: '%s': %s (%" PRId32 ")\n", program_name, mpq_filename,
+                message != NULL ? message : "unknown libmpq error", result
+            );
+        }
+
+        if (result == LIBMPQ_ERROR_OPEN || result == OUTPUT_OPEN_FAILED) {
+            exit(1);
         }
     } while (++optind < argc);
 

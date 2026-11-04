@@ -23,6 +23,7 @@
 
 /* generic includes. */
 #include <getopt.h>
+#include <inttypes.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -35,13 +36,6 @@
 
 /* define new print functions for notification. */
 #define NOTICE(...) printf(__VA_ARGS__);
-
-/* define size of off_t */
-#if _FILE_OFFSET_BITS == 64
-#define OFFTSTR "lli"
-#else
-#define OFFTSTR "li"
-#endif
 
 /* this function show the usage. */
 int
@@ -79,58 +73,42 @@ mpq_info__version(char *program_name)
 }
 
 /* this function shows some archive information. */
-static int
+static int32_t
 mpq_info__archive_info(const char *mpq_filename, unsigned int number, unsigned int count)
 {
-
-    /* some common variables. */
-    off_t size_packed = 0;
-    off_t size_unpacked = 0;
-    off_t offset = 0;
-    unsigned int version = 0;
-    unsigned int files = 0;
+    libmpq__off_t size_packed = 0;
+    libmpq__off_t size_unpacked = 0;
+    libmpq__off_t offset;
+    uint32_t version;
+    uint32_t files;
     mpq_archive_s *mpq_archive;
 
-    /* open the mpq-archive. */
-    if (libmpq__archive_open(&mpq_archive, mpq_filename, -1) < 0) {
-
-        /* open archive failed. */
-        NOTICE("archive number:			%i/%i\n", number, count);
-        NOTICE("archive name:			%s\n", mpq_filename);
+    NOTICE("archive number:			%u/%u\n", number, count);
+    NOTICE("archive name:			%s\n", mpq_filename);
+    int32_t result = libmpq__archive_open(&mpq_archive, mpq_filename, -1);
+    if (result != 0) {
         NOTICE("archive type:			no mpq archive\n");
+        return result;
+    }
 
-    } else {
-
-        /* fetch some required information. */
-        libmpq__archive_version(mpq_archive, &version);
-        libmpq__archive_offset(mpq_archive, &offset);
-        libmpq__archive_files(mpq_archive, &files);
-        libmpq__archive_size_packed(mpq_archive, &size_packed);
-        libmpq__archive_size_unpacked(mpq_archive, &size_unpacked);
-
-        /* open archive was successful, show information. */
-        NOTICE("archive number:			%i/%i\n", number, count);
-        NOTICE("archive name:			%s\n", mpq_filename);
-        NOTICE("archive version:		%i\n", version);
-        NOTICE("archive offset:			%" OFFTSTR "\n", offset);
-        NOTICE("archive files:			%i\n", files);
-        NOTICE("archive packed size:		%" OFFTSTR "\n", size_packed);
-        NOTICE("archive unpacked size:		%" OFFTSTR "\n", size_unpacked);
+    if ((result = libmpq__archive_version(mpq_archive, &version)) == 0 &&
+        (result = libmpq__archive_offset(mpq_archive, &offset)) == 0 &&
+        (result = libmpq__archive_files(mpq_archive, &files)) == 0 &&
+        (result = libmpq__archive_size_packed(mpq_archive, &size_packed)) == 0 &&
+        (result = libmpq__archive_size_unpacked(mpq_archive, &size_unpacked)) == 0) {
+        NOTICE("archive version:		%" PRIu32 "\n", version);
+        NOTICE("archive offset:			%" PRId64 "\n", offset);
+        NOTICE("archive files:			%" PRIu32 "\n", files);
+        NOTICE("archive packed size:		%" PRId64 "\n", size_packed);
+        NOTICE("archive unpacked size:		%" PRId64 "\n", size_unpacked);
         NOTICE(
             "archive compression ratio:	%.2f\n",
             (100 - ((float)size_packed / (float)size_unpacked * 100))
         );
-
-        libmpq__archive_close(mpq_archive);
     }
 
-    /* if multiple archives were given, continue with next one. */
-    if (number < count) {
-        NOTICE("\n-- next archive --\n\n");
-    }
-
-    /* if no error was found, return zero. */
-    return 0;
+    int32_t close_result = libmpq__archive_close(mpq_archive);
+    return result != 0 ? result : close_result;
 }
 
 /* the main function starts here. */
@@ -204,7 +182,17 @@ main(int argc, char **argv)
 
     /* create the file count from the command line arguments. */
     for (; optind < argc; optind++, number++) {
-        mpq_info__archive_info(argv[optind], number, count);
+        int32_t result = mpq_info__archive_info(argv[optind], number, count);
+        if (result != 0) {
+            const char *message = libmpq__strerror(result);
+            ERROR(
+                "%s: '%s': %s (%" PRId32 ")\n", program_name, argv[optind],
+                message != NULL ? message : "unknown libmpq error", result
+            );
+        }
+        if (number < count) {
+            NOTICE("\n-- next archive --\n\n");
+        }
     }
 
     /* execution was successful. */
