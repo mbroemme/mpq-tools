@@ -37,7 +37,7 @@ checkout also requires GNU Autoconf and Automake.
 
 Use libmpq 0.9.0 or later. The build uses pkg-config to find the development
 installation. Until the official 0.9.0 release is available, CI uses libmpq
-development commit `6c9e8e0ad35fe6ea8df3d873471ffe0be00f673e`. The pin will
+development commit `b74d9bd598ccfb2108ad5430f12724e421d6e9cf`. The pin will
 switch to the official release during release qualification.
 
 ## Building and installation

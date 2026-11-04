@@ -83,7 +83,7 @@ jobs:
         uses: actions/checkout@v7
         with:
           repository: mbroemme/libmpq
-          ref: 6c9e8e0ad35fe6ea8df3d873471ffe0be00f673e # 0.9.0 development revision
+          ref: b74d9bd598ccfb2108ad5430f12724e421d6e9cf # 0.9.0 development revision
           path: .lint-libmpq
           persist-credentials: false
 
