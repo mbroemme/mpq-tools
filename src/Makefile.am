@@ -18,9 +18,16 @@ bin_PROGRAMS = \
 	mpq-extract \
 	mpq-info
 
+noinst_PROGRAMS = mpq
+
 # Compiler and linker flags for libmpq.
 AM_CPPFLAGS = $(LIBMPQ_CFLAGS)
 LDADD = $(LIBMPQ_LIBS)
+
+mpq_SOURCES = \
+	mpq-main.c \
+	mpq-cli.c \
+	mpq-cli.h
 
 # Sources for mpq-extract program.
 mpq_extract_SOURCES = mpq-extract.c
