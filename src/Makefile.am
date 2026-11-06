@@ -13,12 +13,8 @@
 # You should have received a copy of the GNU General Public License
 # along with this file; if not, see <https://www.gnu.org/licenses/>.
 
-# Build the main programs.
-bin_PROGRAMS = \
-	mpq-extract \
-	mpq-info
-
-noinst_PROGRAMS = mpq
+# Build the unified command-line utility.
+bin_PROGRAMS = mpq
 
 # Compiler and linker flags for libmpq.
 AM_CPPFLAGS = $(LIBMPQ_CFLAGS)
@@ -27,10 +23,6 @@ LDADD = $(LIBMPQ_LIBS)
 mpq_SOURCES = \
 	mpq-main.c \
 	mpq-cli.c \
-	mpq-cli.h
-
-# Sources for mpq-extract program.
-mpq_extract_SOURCES = mpq-extract.c
-
-# Sources for mpq-info program.
-mpq_info_SOURCES = mpq-info.c
+	mpq-cli.h \
+	mpq-info.c \
+	mpq-extract.c

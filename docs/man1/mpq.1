@@ -1,0 +1,120 @@
+.\" Copyright (c) 2003-2008 Maik Broemme <mbroemme@plusserver.de>
+.\"
+.\" This is free documentation; you can redistribute it and/or
+.\" modify it under the terms of the GNU General Public License as
+.\" published by the Free Software Foundation; either version 2 of
+.\" the License, or (at your option) any later version.
+.\"
+.\" The GNU General Public License's references to "object code"
+.\" and "executables" are to be interpreted as the output of any
+.\" document formatting or typesetting system, including
+.\" intermediate and printed output.
+.\"
+.\" This manual is distributed in the hope that it will be useful,
+.\" but WITHOUT ANY WARRANTY; without even the implied warranty of
+.\" MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+.\" GNU General Public License for more details.
+.\"
+.\" You should have received a copy of the GNU General Public
+.\" License along with this manual; if not, write to the Free
+.\" Software Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA 02111,
+.\" USA.
+.TH MPQ 1 "2026-11-26" "mpq-tools" "User Commands"
+.SH NAME
+mpq \- inspect MoPaQ archives and extract their members
+.SH SYNOPSIS
+.B mpq
+.RI [ "GLOBAL OPTIONS" "] info [\-\-] " "ARCHIVE" " [" "ARCHIVE ..." ]
+.br
+.B mpq
+.RI [ "GLOBAL OPTIONS" "] list [\-i " "INDEX" " ...] [\-\-] " "ARCHIVE"
+.br
+.B mpq
+.RI [ "GLOBAL OPTIONS" "] extract [\-i " "INDEX" " ...] [\-\-] " "ARCHIVE"
+.br
+.B mpq
+.BR \-h ", " \-\-help ", " \-v ", " \-\-version
+.SH DESCRIPTION
+.B mpq info
+displays archive information for one or more archives in operand order.
+It continues after an individual archive fails.
+.PP
+.B mpq list
+lists members of one archive.
+.B mpq extract
+extracts members of one archive to the current directory.
+Both stop at the first operation failure.
+.SH GLOBAL OPTIONS
+Global options precede the command.
+.TP
+.BR \-h ", " \-\-help
+Display global help. Use as a standalone request.
+.TP
+.BR \-v ", " \-\-version
+Display the mpq-tools and libmpq versions. Use as a standalone request.
+.TP
+.BR \-q ", " \-\-quiet
+Suppress successful extraction notices. Requested data and errors remain visible.
+.TP
+.B \-\-verbose
+Report operation and selection details on standard error.
+Quiet and verbose are mutually exclusive.
+.SH COMMAND OPTIONS
+Place command options before the first archive operand.
+.TP
+.BR \-h ", " \-\-help
+Display command help. Use as the sole token after the command.
+.TP
+.BI "\-i " INDEX
+.TQ
+.BI "\-\-index " INDEX
+.TQ
+.BI \-\-index= INDEX
+Select a zero-based member index for list or extract.
+Repeat the option to process members in the given order, including duplicates.
+Omit indexes to process all members in archive order.
+.TP
+.B \-\-
+Treat subsequent tokens as literal archive operands.
+This marker is recognized in command scope before the first archive operand.
+.SH EXTRACTION
+Generated output names begin at
+.BR file000000.xxx .
+Members stream through temporary files in the destination directory.
+A completed member replaces an existing file with the same generated name.
+Failures before publication preserve any existing destination.
+Earlier published members remain after a later member fails.
+.PP
+Ordinary extraction uses applicable libmpq sector integrity checks during
+streaming. It does not perform an additional whole-member CRC32 or MD5
+verification pass.
+.SH EXIT STATUS
+.TP
+.B 0
+Success.
+.TP
+.B 1
+An operation or resource failed.
+.TP
+.B 2
+Invalid invocation.
+.SH EXAMPLES
+.nf
+mpq info archive.mpq
+mpq list archive.mpq
+mpq extract \-i 0 \-i 2 archive.mpq
+.fi
+.SH MIGRATION
+Use
+.B mpq info
+in place of
+.BR mpq-info ,
+and
+.B mpq list
+or
+.B mpq extract
+in place of
+.B mpq-extract
+with its respective operation switch.
+Subtract one from each legacy member number and pass it with
+.BR \-i .

@@ -119,21 +119,11 @@ mpq_main__version(const char *program)
 }
 
 static enum mpq_cli_status
-mpq_main__unavailable(const char *program, const mpq_cli_request_s *request)
-{
-    fprintf(
-        stderr, "%s %s: operation is not yet available in this development build\n", program,
-        mpq_cli__command_name(request->command)
-    );
-    return MPQ_CLI_FAILURE;
-}
-
-static enum mpq_cli_status
 mpq_main__dispatch(const char *program, const mpq_cli_request_s *request)
 {
-    static const mpq_cli_handler handlers[] = { [MPQ_CLI_INFO] = mpq_main__unavailable,
-                                                [MPQ_CLI_LIST] = mpq_main__unavailable,
-                                                [MPQ_CLI_EXTRACT] = mpq_main__unavailable };
+    static const mpq_cli_handler handlers[] = { [MPQ_CLI_INFO] = mpq_info__run,
+                                                [MPQ_CLI_LIST] = mpq_list__run,
+                                                [MPQ_CLI_EXTRACT] = mpq_extract__run };
     return handlers[request->command](program, request);
 }
 

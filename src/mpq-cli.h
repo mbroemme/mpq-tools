@@ -22,6 +22,9 @@
 #include <stddef.h>
 #include <stdint.h>
 
+/* A generated member name holds ten decimal digits plus its affixes and NUL. */
+#define MPQ_GENERATED_FILENAME_SIZE sizeof("file4294967295.xxx")
+
 enum mpq_cli_command
 {
     MPQ_CLI_NO_COMMAND,
@@ -67,5 +70,10 @@ enum mpq_cli_status
 mpq_cli__parse(const char *program, int argc, char *const argv[], mpq_cli_request_s *request);
 
 void mpq_cli__clear(mpq_cli_request_s *request);
+
+enum mpq_cli_status mpq_info__run(const char *program, const mpq_cli_request_s *request);
+enum mpq_cli_status mpq_list__run(const char *program, const mpq_cli_request_s *request);
+enum mpq_cli_status mpq_extract__run(const char *program, const mpq_cli_request_s *request);
+int32_t mpq_extract__file_name(uint32_t file_number, char *filename, size_t filename_size);
 
 #endif

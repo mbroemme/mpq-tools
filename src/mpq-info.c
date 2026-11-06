@@ -1,7 +1,8 @@
 /*
- *  mpq-info.c -- functions for information about the given mpq archive.
+ *  mpq-info.c -- archive information and member listing.
  *
  *  Copyright (c) 2003-2007 Maik Broemme <mbroemme@plusserver.de>
+ *  Member listing copyright (c) 2003-2008 Maik Broemme <mbroemme@plusserver.de>
  *
  *  This program is free software; you can redistribute it and/or modify
  *  it under the terms of the GNU General Public License as published by
@@ -18,63 +19,19 @@
  *  Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA 02111-1307, USA.
  */
 
-/* mpq-tools configuration includes. */
 #include "config.h"
+#include "mpq-cli.h"
 
-/* generic includes. */
-#include <getopt.h>
 #include <inttypes.h>
+#include <math.h>
 #include <stdio.h>
-#include <stdlib.h>
-#include <string.h>
 
-/* libmpq includes. */
 #include <libmpq/mpq.h>
 
-/* define new print functions for error. */
-#define ERROR(...) fprintf(stderr, __VA_ARGS__);
-
-/* define new print functions for notification. */
 #define NOTICE(...) printf(__VA_ARGS__);
 
-/* this function show the usage. */
-int
-mpq_info__usage(char *program_name)
-{
-
-    /* show the help. */
-    NOTICE("Usage: %s [OPTION] [ARCHIVE]...\n", program_name);
-    NOTICE("Displays information of a mpq-archive. (Example: %s d2speech.mpq)\n", program_name);
-    NOTICE("\n");
-    NOTICE("  -h, --help		shows this help screen\n");
-    NOTICE("  -v, --version		shows the version information\n");
-    NOTICE("\n");
-    NOTICE("Please report bugs to the appropriate authors, which can be found in the\n");
-    NOTICE("version information. All other things can be send to <%s>\n", PACKAGE_BUGREPORT);
-
-    /* if no error was found, return zero. */
-    return 0;
-}
-
-/* this function shows the version information. */
-int
-mpq_info__version(char *program_name)
-{
-
-    /* show the version. */
-    NOTICE("%s (mopaq) %s (libmpq %s)\n", program_name, VERSION, libmpq__version());
-    NOTICE("Written by Maik Broemme <mbroemme@libmpq.org>\n");
-    NOTICE("\n");
-    NOTICE("This is free software; see the source for copying conditions.  There is NO\n");
-    NOTICE("warranty; not even for MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.\n");
-
-    /* if no error was found, return zero. */
-    return 0;
-}
-
-/* this function shows some archive information. */
 static int32_t
-mpq_info__archive_info(const char *mpq_filename, unsigned int number, unsigned int count)
+mpq_info__archive_info(const char *mpq_filename, size_t number, size_t count)
 {
     libmpq__off_t size_packed = 0;
     libmpq__off_t size_unpacked = 0;
@@ -83,7 +40,7 @@ mpq_info__archive_info(const char *mpq_filename, unsigned int number, unsigned i
     uint32_t files;
     mpq_archive_s *mpq_archive;
 
-    NOTICE("archive number:			%u/%u\n", number, count);
+    NOTICE("archive number:			%zu/%zu\n", number, count);
     NOTICE("archive name:			%s\n", mpq_filename);
     int32_t result = libmpq__archive_open(&mpq_archive, mpq_filename, -1);
     if (result != 0) {
@@ -111,90 +68,167 @@ mpq_info__archive_info(const char *mpq_filename, unsigned int number, unsigned i
     return result != 0 ? result : close_result;
 }
 
-/* the main function starts here. */
-int
-main(int argc, char **argv)
+static void
+mpq_info__library_error(
+    const char *program, const char *command, const char *archive, const uint32_t *index,
+    int32_t status
+)
 {
-
-    /* common variables for the command line. */
-    int opt;
-    int option_index = 0;
-    static char const short_options[] = "hv";
-    static struct option const long_options[] = { { "help", no_argument, 0, 'h' },
-                                                  { "version", no_argument, 0, 'v' },
-                                                  { 0, 0, 0, 0 } };
-    optind = 0;
-    opterr = 0;
-
-    /* some common variables. */
-    char *program_name;
-    unsigned int count;
-    unsigned int number;
-
-    /* get program name. */
-    program_name = argv[0];
-    char *slash = program_name ? (strrchr)(program_name, '/') : NULL;
-    if (slash) {
-        program_name = slash + 1;
+    const char *message = libmpq__strerror(status);
+    fprintf(stderr, "%s %s: '%s': ", program, command, archive);
+    if (index != NULL) {
+        fprintf(stderr, "member %" PRIu32 ": ", *index);
     }
+    fprintf(
+        stderr, "%s (%" PRId32 ")\n", message != NULL ? message : "unknown libmpq error", status
+    );
+}
 
-    /* if no command line option was given, show some info. */
-    if (argc <= 1) {
-
-        /* show some info on how to get help. :) */
-        ERROR("%s: no action was given\n", program_name);
-        ERROR("Try `%s --help' for more information.\n", program_name);
-
-        /* exit with error. */
-        exit(1);
-    }
-
-    /* parse command line. */
-    while ((opt = getopt_long(argc, argv, short_options, long_options, &option_index)) != -1) {
-
-        /* check if all command line options are parsed. */
-        if (opt == -1) {
-            break;
+enum mpq_cli_status
+mpq_info__run(const char *program, const mpq_cli_request_s *request)
+{
+    enum mpq_cli_status result = MPQ_CLI_SUCCESS;
+    for (size_t i = 0; i < request->archive_count; i++) {
+        const char *archive = request->archives[i];
+        if (request->verbose) {
+            fprintf(stderr, "%s info: '%s': reading archive information\n", program, archive);
         }
-
-        /* parse option. */
-        switch (opt) {
-        case 'h':
-            mpq_info__usage(program_name);
-            exit(0);
-        case 'v':
-            mpq_info__version(program_name);
-            exit(0);
-        default:
-
-            /* show some info on how to get help. :) */
-            ERROR("%s: unrecognized option `%s'\n", program_name, argv[optind - 1]);
-            ERROR("Try `%s --help' for more information.\n", program_name);
-
-            /* exit with error. */
-            exit(1);
+        int32_t status = mpq_info__archive_info(archive, i + 1, request->archive_count);
+        if (status != 0) {
+            mpq_info__library_error(program, "info", archive, NULL, status);
+            result = MPQ_CLI_FAILURE;
         }
-    }
-
-    /* fill option structure with long option arguments */
-    count = argc - optind;
-    number = 1;
-
-    /* create the file count from the command line arguments. */
-    for (; optind < argc; optind++, number++) {
-        int32_t result = mpq_info__archive_info(argv[optind], number, count);
-        if (result != 0) {
-            const char *message = libmpq__strerror(result);
-            ERROR(
-                "%s: '%s': %s (%" PRId32 ")\n", program_name, argv[optind],
-                message != NULL ? message : "unknown libmpq error", result
-            );
-        }
-        if (number < count) {
+        if (i + 1 < request->archive_count) {
             NOTICE("\n-- next archive --\n\n");
         }
     }
+    return result;
+}
 
-    /* execution was successful. */
-    exit(0);
+static int32_t
+mpq_info__list_member(
+    mpq_archive_s *archive, uint32_t index, uint32_t count, bool full, bool separate
+)
+{
+    libmpq__off_t size_packed;
+    libmpq__off_t size_unpacked;
+    uint32_t flags;
+    char filename[MPQ_GENERATED_FILENAME_SIZE];
+    int32_t result;
+
+    if ((result = libmpq__file_size_packed(archive, index, &size_packed)) != 0 ||
+        (result = libmpq__file_size_unpacked(archive, index, &size_unpacked)) != 0 ||
+        (result = libmpq__file_flags(archive, index, &flags)) != 0 ||
+        (result = mpq_extract__file_name(index, filename, sizeof(filename))) != 0) {
+        return result;
+    }
+
+    double ratio = 100 - fabs((float)size_packed / (float)size_unpacked * 100);
+    const char *compressed = (flags & LIBMPQ_FILE_FLAG_COMPRESS) ? "yes" : "no";
+    const char *imploded = (flags & LIBMPQ_FILE_FLAG_IMPLODE) ? "yes" : "no";
+    const char *encrypted = (flags & LIBMPQ_FILE_FLAG_ENCRYPTED) ? "yes" : "no";
+
+    if (full) {
+        NOTICE(
+            "  %4" PRIu32 "   %10" PRId64 "   %9" PRId64 " %6.0f%%   %3s   %3s   %3s   %s\n", index,
+            size_packed, size_unpacked, ratio, compressed, imploded, encrypted, filename
+        );
+    } else {
+        if (separate) {
+            NOTICE("\n");
+        }
+        NOTICE("file number:			%" PRIu32 "/%" PRIu32 "\n", index, count);
+        NOTICE("file packed size:		%" PRId64 "\n", size_packed);
+        NOTICE("file unpacked size:		%" PRId64 "\n", size_unpacked);
+        NOTICE("file compression ratio:		%.2f%%\n", ratio);
+        NOTICE("file compressed:		%s\n", compressed);
+        NOTICE("file imploded:			%s\n", imploded);
+        NOTICE("file encrypted:			%s\n", encrypted);
+        NOTICE("file name:			%s\n", filename);
+    }
+    return 0;
+}
+
+static enum mpq_cli_status
+mpq_info__list_members(
+    const char *program, const mpq_cli_request_s *request, mpq_archive_s *archive, uint32_t count
+)
+{
+    const char *path = request->archives[0];
+    bool full = request->index_count == 0;
+    if (full) {
+        NOTICE("number   ucmp. size   cmp. size   ratio   cmp   imp   enc   filename\n");
+        NOTICE("------   ----------   ---------   -----   ---   ---   ---   --------\n");
+    }
+
+    size_t selections = full ? count : request->index_count;
+    for (size_t i = 0; i < selections; i++) {
+        uint32_t index = full ? (uint32_t)i : request->indexes[i];
+        if (index >= count) {
+            fprintf(
+                stderr, "%s list: '%s': member %" PRIu32 " out of range\n", program, path, index
+            );
+            return MPQ_CLI_FAILURE;
+        }
+        if (request->verbose && !full) {
+            fprintf(stderr, "%s list: '%s': listing member %" PRIu32 "\n", program, path, index);
+        }
+        int32_t status = mpq_info__list_member(archive, index, count, full, i != 0);
+        if (status != 0) {
+            mpq_info__library_error(program, "list", path, &index, status);
+            return MPQ_CLI_FAILURE;
+        }
+    }
+    return MPQ_CLI_SUCCESS;
+}
+
+enum mpq_cli_status
+mpq_list__run(const char *program, const mpq_cli_request_s *request)
+{
+    const char *path = request->archives[0];
+    bool full = request->index_count == 0;
+    if (request->verbose) {
+        fprintf(
+            stderr, "%s list: '%s': listing %s members\n", program, path, full ? "all" : "selected"
+        );
+    }
+    mpq_archive_s *archive;
+    int32_t status = libmpq__archive_open(&archive, path, -1);
+    if (status != 0) {
+        mpq_info__library_error(program, "list", path, NULL, status);
+        return MPQ_CLI_FAILURE;
+    }
+
+    uint32_t count;
+    status = libmpq__archive_files(archive, &count);
+    enum mpq_cli_status result = MPQ_CLI_FAILURE;
+    if (status == 0) {
+        result = mpq_info__list_members(program, request, archive, count);
+    }
+
+    libmpq__off_t size_packed = 0;
+    libmpq__off_t size_unpacked = 0;
+    if (result == MPQ_CLI_SUCCESS && full &&
+        ((status = libmpq__archive_size_packed(archive, &size_packed)) != 0 ||
+         (status = libmpq__archive_size_unpacked(archive, &size_unpacked)) != 0)) {
+        result = MPQ_CLI_FAILURE;
+    }
+
+    int32_t close_status = libmpq__archive_close(archive);
+    if (result == MPQ_CLI_SUCCESS) {
+        status = close_status;
+    }
+    if (status != 0) {
+        mpq_info__library_error(program, "list", path, NULL, status);
+        return MPQ_CLI_FAILURE;
+    }
+
+    if (result == MPQ_CLI_SUCCESS && full) {
+        NOTICE("------   ----------   ---------   -----   ---   ---   ---   --------\n");
+        NOTICE(
+            "  %4" PRIu32 "   %10" PRId64 "   %9" PRId64 " %6.0f%%   %s\n", count, size_packed,
+            size_unpacked, (100 - fabs(((float)size_packed / (float)size_unpacked * 100))), path
+        );
+    }
+    return result;
 }

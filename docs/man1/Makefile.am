@@ -14,6 +14,4 @@
 # along with this file; if not, see <https://www.gnu.org/licenses/>.
 
 # Manual pages for installed command-line utilities.
-dist_man_MANS = \
-	mpq-extract.1 \
-	mpq-info.1
+dist_man_MANS = mpq.1
