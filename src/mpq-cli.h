@@ -59,6 +59,14 @@ typedef struct mpq_cli_request
     size_t index_count;
 } mpq_cli_request_s;
 
+typedef struct mpq_cli_context
+{
+    const char *program;
+    enum mpq_cli_command command;
+    const char *archive;
+    const uint32_t *index;
+} mpq_cli_context_s;
+
 typedef enum mpq_cli_status (*mpq_cli_handler)(
     const char *program, const mpq_cli_request_s *request
 );
@@ -71,9 +79,13 @@ mpq_cli__parse(const char *program, int argc, char *const argv[], mpq_cli_reques
 
 void mpq_cli__clear(mpq_cli_request_s *request);
 
+void mpq_cli__error_prefix(const mpq_cli_context_s *context);
+void mpq_cli__error(const mpq_cli_context_s *context, const char *message);
+bool mpq_cli__library_ok(const mpq_cli_context_s *context, const char *operation, int32_t status);
+
 enum mpq_cli_status mpq_info__run(const char *program, const mpq_cli_request_s *request);
 enum mpq_cli_status mpq_list__run(const char *program, const mpq_cli_request_s *request);
 enum mpq_cli_status mpq_extract__run(const char *program, const mpq_cli_request_s *request);
-int32_t mpq_extract__file_name(uint32_t file_number, char *filename, size_t filename_size);
+bool mpq_extract__file_name(uint32_t file_number, char *filename, size_t filename_size);
 
 #endif

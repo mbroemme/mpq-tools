@@ -50,12 +50,6 @@
 /* libmpq includes. */
 #include <libmpq/mpq.h>
 
-/* define new print functions for error. */
-#define ERROR(...) fprintf(stderr, __VA_ARGS__);
-
-/* define new print functions for notification. */
-#define NOTICE(...) printf(__VA_ARGS__);
-
 #define EXTRACT_BUFFER_SIZE (64u * 1024u)
 
 #ifdef _WIN32
@@ -64,65 +58,37 @@
 #define TEMP_FILENAME_TEMPLATE ".mpq-extract-XXXXXX"
 #endif
 
-/* Local failures use positive statuses, distinct from libmpq errors. */
-enum
-{
-    OUTPUT_OPEN_FAILED = 1,
-    OUTPUT_IO_FAILED
-};
-
 /* Generate a name until listfile support is available. */
-int32_t
+bool
 mpq_extract__file_name(uint32_t file_number, char *filename, size_t filename_size)
 {
     int result = snprintf(filename, filename_size, "file%06" PRIu32 ".xxx", file_number);
-    if (result < 0) {
-        return LIBMPQ_ERROR_FORMAT;
-    }
-    if ((size_t)result >= filename_size) {
-        return LIBMPQ_ERROR_SIZE;
-    }
-    return 0;
-}
-
-typedef struct mpq_extract_context
-{
-    const char *program;
-    const char *archive;
-    uint32_t index;
-} mpq_extract_context_s;
-
-static void
-mpq_extract__error_prefix(const mpq_extract_context_s *context)
-{
-    fprintf(
-        stderr, "%s extract: '%s': member %" PRIu32 ": ", context->program, context->archive,
-        context->index
-    );
+    return result >= 0 && (size_t)result < filename_size;
 }
 
 static void
 mpq_extract__output_error(
-    const mpq_extract_context_s *context, const char *filename, const char *operation, int error
+    const mpq_cli_context_s *context, const char *filename, const char *operation, int error
 )
 {
-    mpq_extract__error_prefix(context);
-    ERROR(
-        "'%s': cannot %s output: %s\n", filename, operation,
+    mpq_cli__error_prefix(context);
+    fprintf(
+        stderr, "cannot %s '%s': %s\n", operation, filename,
         error != 0 ? strerror(error) : "I/O error"
     );
 }
 
 static void
-mpq_extract__discard_temp(const mpq_extract_context_s *context, const char *temp_name)
+mpq_extract__discard_temp(const mpq_cli_context_s *context, const char *temp_name)
 {
+    errno = 0;
 #ifdef _WIN32
     int result = _unlink(temp_name);
 #else
     int result = unlink(temp_name);
 #endif
     if (result != 0) {
-        mpq_extract__output_error(context, temp_name, "remove temporary", errno);
+        mpq_extract__output_error(context, temp_name, "remove temporary output", errno);
     }
 }
 
@@ -154,7 +120,7 @@ mpq_extract__create_temp(char *temp_name)
 #endif
 
 static FILE *
-mpq_extract__open_temp(const mpq_extract_context_s *context, char *temp_name, const char *filename)
+mpq_extract__open_temp(const mpq_cli_context_s *context, char *temp_name, const char *filename)
 {
     errno = 0;
 #ifdef _WIN32
@@ -163,7 +129,7 @@ mpq_extract__open_temp(const mpq_extract_context_s *context, char *temp_name, co
     int fd = mkstemp(temp_name);
 #endif
     if (fd < 0) {
-        mpq_extract__output_error(context, filename, "create temporary", errno);
+        mpq_extract__output_error(context, filename, "create temporary output for", errno);
         return NULL;
     }
 
@@ -174,45 +140,49 @@ mpq_extract__open_temp(const mpq_extract_context_s *context, char *temp_name, co
     FILE *fp = fdopen(fd, "wb");
 #endif
     if (fp == NULL) {
-        mpq_extract__output_error(context, filename, "open temporary", errno);
+        mpq_extract__output_error(context, temp_name, "attach temporary output stream to", errno);
+        errno = 0;
 #ifdef _WIN32
         int close_result = _close(fd);
 #else
         int close_result = close(fd);
 #endif
         if (close_result != 0) {
-            mpq_extract__output_error(context, temp_name, "close temporary", errno);
+            mpq_extract__output_error(
+                context, temp_name, "close temporary output descriptor", errno
+            );
         }
         mpq_extract__discard_temp(context, temp_name);
     }
     return fp;
 }
 
-static int32_t
-mpq_extract__publish(
-    const mpq_extract_context_s *context, const char *temp_name, const char *filename
-)
+static bool
+mpq_extract__publish(const mpq_cli_context_s *context, const char *temp_name, const char *filename)
 {
 #ifdef _WIN32
     if (!MoveFileExA(temp_name, filename, MOVEFILE_REPLACE_EXISTING)) {
-        unsigned long error = GetLastError();
-        mpq_extract__error_prefix(context);
-        ERROR("'%s': cannot publish output: Windows error %lu\n", filename, error);
-        return OUTPUT_IO_FAILED;
+        DWORD error = GetLastError();
+        mpq_cli__error_prefix(context);
+        fprintf(
+            stderr, "cannot publish output '%s': Windows error %lu\n", filename,
+            (unsigned long)error
+        );
+        return false;
     }
 #else
     errno = 0;
     if (rename(temp_name, filename) != 0) {
-        mpq_extract__output_error(context, filename, "publish", errno);
-        return OUTPUT_IO_FAILED;
+        mpq_extract__output_error(context, filename, "publish output", errno);
+        return false;
     }
 #endif
-    return 0;
+    return true;
 }
 
-static int32_t
+static bool
 mpq_extract__copy_stream(
-    const mpq_extract_context_s *context, mpq_stream_s *stream, FILE *fp, const char *filename,
+    const mpq_cli_context_s *context, mpq_stream_s *stream, FILE *fp, const char *temp_name,
     uint8_t *buffer, libmpq__off_t size
 )
 {
@@ -220,147 +190,133 @@ mpq_extract__copy_stream(
     libmpq__off_t total = 0;
     for (;;) {
         libmpq__off_t transferred = -1;
-        int32_t result = libmpq__stream_read(stream, buffer, request, &transferred);
-        if (result != 0) {
-            return result;
+        if (!mpq_cli__library_ok(
+                context, "read member stream",
+                libmpq__stream_read(stream, buffer, request, &transferred)
+            )) {
+            return false;
         }
         if (transferred < 0 || transferred > request || transferred > size - total) {
-            return LIBMPQ_ERROR_SIZE;
+            mpq_cli__error(context, "invalid member stream transfer count");
+            return false;
         }
         if (transferred == 0) {
-            return total == size ? 0 : LIBMPQ_ERROR_SIZE;
+            if (total != size) {
+                mpq_cli__error(context, "premature end of member stream");
+                return false;
+            }
+            return true;
         }
 
         size_t bytes = (size_t)transferred;
         errno = 0;
         if (fwrite(buffer, 1, bytes, fp) != bytes) {
-            mpq_extract__output_error(context, filename, "write temporary", errno);
-            return OUTPUT_IO_FAILED;
+            mpq_extract__output_error(context, temp_name, "write temporary output", errno);
+            return false;
         }
         total += transferred;
     }
 }
 
 /* Extract one member to its generated filename. */
-static int32_t
+static bool
 mpq_extract__extract_file(
-    const mpq_extract_context_s *context, mpq_archive_s *mpq_archive, uint8_t *buffer, bool quiet
+    const mpq_cli_context_s *context, mpq_archive_s *archive, uint8_t *buffer, bool quiet
 )
 {
     char filename[MPQ_GENERATED_FILENAME_SIZE];
-    int32_t result = mpq_extract__file_name(context->index, filename, sizeof(filename));
-    if (result != 0) {
-        return result;
+    if (!mpq_extract__file_name(*context->index, filename, sizeof(filename))) {
+        mpq_cli__error(context, "cannot generate member filename");
+        return false;
     }
 
     mpq_stream_s *stream;
-    result = libmpq__stream_open(mpq_archive, context->index, &stream);
-    if (result != 0) {
-        return result;
+    if (!mpq_cli__library_ok(
+            context, "open member stream", libmpq__stream_open(archive, *context->index, &stream)
+        )) {
+        return false;
     }
 
     char temp_name[] = TEMP_FILENAME_TEMPLATE;
     FILE *fp = NULL;
     libmpq__off_t size = -1;
-    result = libmpq__stream_size(stream, &size);
-    if (result == 0) {
+    bool success = mpq_cli__library_ok(
+        context, "obtain member stream size", libmpq__stream_size(stream, &size)
+    );
+    if (success) {
         if (size < 0) {
-            result = LIBMPQ_ERROR_SIZE;
+            mpq_cli__error(context, "negative member stream size");
+            success = false;
         } else {
             fp = mpq_extract__open_temp(context, temp_name, filename);
-            result = fp != NULL
-                         ? mpq_extract__copy_stream(context, stream, fp, filename, buffer, size)
-                         : OUTPUT_OPEN_FAILED;
+            success = fp != NULL &&
+                      mpq_extract__copy_stream(context, stream, fp, temp_name, buffer, size);
         }
     }
 
-    int32_t stream_close_result = libmpq__stream_close(stream);
-    if (result == 0) {
-        result = stream_close_result;
-    }
+    int32_t stream_close_status = libmpq__stream_close(stream);
+    success = success && mpq_cli__library_ok(context, "close member stream", stream_close_status);
     if (fp == NULL) {
-        return result;
+        return false;
     }
 
     errno = 0;
     int close_result = fclose(fp);
-    if (close_result != 0 && result == 0) {
-        mpq_extract__output_error(context, filename, "close temporary", errno);
-        result = OUTPUT_IO_FAILED;
+    if (close_result != 0 && success) {
+        mpq_extract__output_error(context, temp_name, "close temporary output", errno);
+        success = false;
     }
 
-    if (result == 0) {
-        result = mpq_extract__publish(context, temp_name, filename);
-    }
-    if (result == 0) {
-        if (!quiet) {
-            NOTICE("extracting %s\n", filename);
-        }
-    } else {
+    success = success && mpq_extract__publish(context, temp_name, filename);
+    if (!success) {
         mpq_extract__discard_temp(context, temp_name);
+    } else if (!quiet) {
+        printf("extracting %s\n", filename);
     }
-    return result;
+    return success;
 }
 
-static void
-mpq_extract__library_error(const char *program, const char *path, int32_t status)
-{
-    const char *message = libmpq__strerror(status);
-    fprintf(
-        stderr, "%s extract: '%s': %s (%" PRId32 ")\n", program, path,
-        message != NULL ? message : "unknown libmpq error", status
-    );
-}
-
-static enum mpq_cli_status
+static bool
 mpq_extract__members(
-    const char *program, const mpq_cli_request_s *request, mpq_archive_s *archive, uint32_t count
+    mpq_cli_context_s context, const mpq_cli_request_s *request, mpq_archive_s *archive,
+    uint32_t count
 )
 {
-    const char *path = request->archives[0];
     bool all = request->index_count == 0;
     uint8_t *buffer = NULL;
-    enum mpq_cli_status result = MPQ_CLI_SUCCESS;
+    bool success = true;
     size_t selections = all ? count : request->index_count;
     for (size_t i = 0; i < selections; i++) {
         uint32_t index = all ? (uint32_t)i : request->indexes[i];
-        mpq_extract_context_s context = { program, path, index };
+        context.index = &index;
         if (index >= count) {
-            mpq_extract__error_prefix(&context);
-            fprintf(stderr, "out of range\n");
-            result = MPQ_CLI_FAILURE;
+            mpq_cli__error(&context, "out of range");
+            success = false;
             break;
         }
         if (buffer == NULL) {
             const size_t capacity = EXTRACT_BUFFER_SIZE;
             buffer = malloc(capacity);
             if (buffer == NULL) {
-                mpq_extract__library_error(program, path, LIBMPQ_ERROR_MALLOC);
-                result = MPQ_CLI_FAILURE;
+                context.index = NULL;
+                mpq_cli__error(&context, "cannot allocate extraction buffer");
+                success = false;
                 break;
             }
         }
         if (request->verbose && !all) {
             fprintf(
-                stderr, "%s extract: '%s': extracting member %" PRIu32 "\n", program, path, index
+                stderr, "%s extract: '%s': extracting member %" PRIu32 "\n", context.program,
+                context.archive, index
             );
         }
-        int32_t status = mpq_extract__extract_file(&context, archive, buffer, request->quiet);
-        if (status != 0) {
-            if (status < 0) {
-                const char *message = libmpq__strerror(status);
-                mpq_extract__error_prefix(&context);
-                fprintf(
-                    stderr, "%s (%" PRId32 ")\n",
-                    message != NULL ? message : "unknown libmpq error", status
-                );
-            }
-            result = MPQ_CLI_FAILURE;
+        if (!mpq_extract__extract_file(&context, archive, buffer, request->quiet)) {
+            success = false;
             break;
         }
     }
     free(buffer);
-    return result;
+    return success;
 }
 
 enum mpq_cli_status
@@ -373,26 +329,21 @@ mpq_extract__run(const char *program, const mpq_cli_request_s *request)
             request->index_count == 0 ? "all" : "selected"
         );
     }
+    mpq_cli_context_s context = { program, request->command, path, NULL };
     mpq_archive_s *archive;
-    int32_t status = libmpq__archive_open(&archive, path, -1);
-    if (status != 0) {
-        mpq_extract__library_error(program, path, status);
+    if (!mpq_cli__library_ok(&context, "open archive", libmpq__archive_open(&archive, path, -1))) {
         return MPQ_CLI_FAILURE;
     }
 
     uint32_t count;
-    status = libmpq__archive_files(archive, &count);
-    enum mpq_cli_status result = MPQ_CLI_FAILURE;
-    if (status == 0) {
-        result = mpq_extract__members(program, request, archive, count);
-    }
+    bool success =
+        mpq_cli__library_ok(
+            &context, "obtain archive member count", libmpq__archive_files(archive, &count)
+        ) &&
+        mpq_extract__members(context, request, archive, count);
     int32_t close_status = libmpq__archive_close(archive);
-    if (result == MPQ_CLI_SUCCESS) {
-        status = close_status;
-    }
-    if (status != 0) {
-        mpq_extract__library_error(program, path, status);
+    if (!success || !mpq_cli__library_ok(&context, "close archive", close_status)) {
         return MPQ_CLI_FAILURE;
     }
-    return result;
+    return MPQ_CLI_SUCCESS;
 }

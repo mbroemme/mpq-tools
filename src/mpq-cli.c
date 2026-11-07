@@ -17,9 +17,12 @@
 
 #include "mpq-cli.h"
 
+#include <inttypes.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+
+#include <libmpq/mpq.h>
 
 static const char *const command_names[] = { [MPQ_CLI_INFO] = "info",
                                              [MPQ_CLI_LIST] = "list",
@@ -232,4 +235,38 @@ mpq_cli__clear(mpq_cli_request_s *request)
 {
     free(request->indexes);
     *request = (mpq_cli_request_s){ 0 };
+}
+
+void
+mpq_cli__error_prefix(const mpq_cli_context_s *context)
+{
+    fprintf(
+        stderr, "%s %s: '%s': ", context->program, mpq_cli__command_name(context->command),
+        context->archive
+    );
+    if (context->index != NULL) {
+        fprintf(stderr, "member %" PRIu32 ": ", *context->index);
+    }
+}
+
+void
+mpq_cli__error(const mpq_cli_context_s *context, const char *message)
+{
+    mpq_cli__error_prefix(context);
+    fprintf(stderr, "%s\n", message);
+}
+
+bool
+mpq_cli__library_ok(const mpq_cli_context_s *context, const char *operation, int32_t status)
+{
+    if (status == 0) {
+        return true;
+    }
+    const char *message = libmpq__strerror(status);
+    mpq_cli__error_prefix(context);
+    fprintf(
+        stderr, "cannot %s: %s (%" PRId32 ")\n", operation,
+        message != NULL ? message : "unknown libmpq error", status
+    );
+    return false;
 }
